@@ -254,15 +254,191 @@ def command_execute():
 def obsidian_notes():
     """Lista todas as notas do vault"""
     try:
-        # Implementar lógica para listar notas
-        # Por enquanto, retorna uma lista vazia
+        config = load_config()
+        vault_path = config.get('vault_path')
+        
+        if not vault_path or not Path(vault_path).exists():
+            return jsonify({
+                'success': False,
+                'error': 'Caminho do vault não configurado ou não encontrado'
+            }), 404
+        
+        notes = []
+        vault = Path(vault_path)
+        
+        for md_file in vault.rglob('*.md'):
+            notes.append({
+                'name': md_file.stem,
+                'path': str(md_file.relative_to(vault)),
+                'full_path': str(md_file),
+                'size': md_file.stat().st_size,
+                'modified': datetime.fromtimestamp(md_file.stat().st_mtime).isoformat()
+            })
+        
+        logger.info(f'Listadas {len(notes)} notas')
+        
         return jsonify({
             'success': True,
-            'notes': [],
-            'count': 0
+            'notes': notes,
+            'count': len(notes)
         })
     except Exception as e:
         logger.error(f'Erro ao listar notas: {str(e)}')
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/obsidian/note/create', methods=['POST'])
+@require_auth
+def obsidian_note_create():
+    """Cria uma nova nota no vault"""
+    try:
+        data = request.get_json()
+        title = data.get('title')
+        content = data.get('content', '')
+        
+        if not title:
+            return jsonify({
+                'success': False,
+                'error': 'Título da nota não fornecido'
+            }), 400
+        
+        config = load_config()
+        vault_path = config.get('vault_path')
+        
+        if not vault_path or not Path(vault_path).exists():
+            return jsonify({
+                'success': False,
+                'error': 'Caminho do vault não configurado ou não encontrado'
+            }), 404
+        
+        # Criar arquivo da nota
+        note_path = Path(vault_path) / f'{title}.md'
+        
+        if note_path.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Nota "{title}" já existe'
+            }), 409
+        
+        with open(note_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        logger.info(f'Nota criada: {title}')
+        
+        return jsonify({
+            'success': True,
+            'message': f'Nota "{title}" criada com sucesso',
+            'path': str(note_path)
+        })
+    except Exception as e:
+        logger.error(f'Erro ao criar nota: {str(e)}')
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/obsidian/note/search', methods=['POST'])
+@require_auth
+def obsidian_note_search():
+    """Busca conteúdo nas notas do vault"""
+    try:
+        data = request.get_json()
+        query = data.get('query', '').lower()
+        
+        if not query:
+            return jsonify({
+                'success': False,
+                'error': 'Termo de busca não fornecido'
+            }), 400
+        
+        config = load_config()
+        vault_path = config.get('vault_path')
+        
+        if not vault_path or not Path(vault_path).exists():
+            return jsonify({
+                'success': False,
+                'error': 'Caminho do vault não configurado ou não encontrado'
+            }), 404
+        
+        results = []
+        vault = Path(vault_path)
+        
+        for md_file in vault.rglob('*.md'):
+            try:
+                with open(md_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    if query in content.lower():
+                        # Encontrar contexto
+                        lines = content.split('\n')
+                        matches = []
+                        for i, line in enumerate(lines):
+                            if query in line.lower():
+                                matches.append({
+                                    'line': i + 1,
+                                    'text': line.strip()
+                                })
+                        
+                        results.append({
+                            'name': md_file.stem,
+                            'path': str(md_file.relative_to(vault)),
+                            'full_path': str(md_file),
+                            'matches': matches[:5]  # Limitar a 5 matches por arquivo
+                        })
+            except Exception as e:
+                logger.warning(f'Erro ao ler arquivo {md_file}: {str(e)}')
+                continue
+        
+        logger.info(f'Busca por "{query}" retornou {len(results)} resultados')
+        
+        return jsonify({
+            'success': True,
+            'query': query,
+            'results': results,
+            'count': len(results)
+        })
+    except Exception as e:
+        logger.error(f'Erro ao buscar em notas: {str(e)}')
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/obsidian/vault/configure', methods=['POST'])
+@require_auth
+def obsidian_vault_configure():
+    """Configura o caminho do vault"""
+    try:
+        data = request.get_json()
+        vault_path = data.get('vault_path')
+        
+        if not vault_path:
+            return jsonify({
+                'success': False,
+                'error': 'Caminho do vault não fornecido'
+            }), 400
+        
+        path = Path(vault_path)
+        if not path.exists() or not path.is_dir():
+            return jsonify({
+                'success': False,
+                'error': f'Diretório não encontrado: {vault_path}'
+            }), 404
+        
+        config = load_config()
+        config['vault_path'] = str(path)
+        save_config(config)
+        
+        logger.info(f'Vault configurado: {vault_path}')
+        
+        return jsonify({
+            'success': True,
+            'message': 'Vault configurado com sucesso',
+            'vault_path': str(path)
+        })
+    except Exception as e:
+        logger.error(f'Erro ao configurar vault: {str(e)}')
         return jsonify({
             'success': False,
             'error': str(e)
