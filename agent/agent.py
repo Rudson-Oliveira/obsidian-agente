@@ -1,0 +1,308 @@
+#!/usr/bin/env python3
+"""
+Obsidian Desktop Agent
+Agente local que fornece uma API REST para automação do Obsidian
+"""
+
+import os
+import sys
+import json
+import logging
+import subprocess
+import secrets
+from pathlib import Path
+from datetime import datetime
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+
+# Configuração de logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Inicializar Flask
+app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": ["*"]}})
+
+# Configuração
+CONFIG_DIR = Path.home() / '.obsidian-agent'
+CONFIG_FILE = CONFIG_DIR / 'config.json'
+DEFAULT_CONFIG = {
+    'port': 5001,
+    'api_key': f'BO_{secrets.token_urlsafe(32)}',
+    'obsidian_path': None,
+}
+
+def load_config():
+    """Carrega configuração do arquivo ou cria uma nova"""
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE, 'r') as f:
+            return json.load(f)
+    else:
+        CONFIG_DIR.mkdir(exist_ok=True)
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(DEFAULT_CONFIG, f, indent=2)
+        return DEFAULT_CONFIG
+
+def save_config(config):
+    """Salva configuração no arquivo"""
+    CONFIG_DIR.mkdir(exist_ok=True)
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, f, indent=2)
+
+def find_obsidian_path():
+    """Encontra o caminho do Obsidian no sistema"""
+    if sys.platform == 'win32':
+        possible_paths = [
+            Path.home() / 'AppData' / 'Local' / 'Programs' / 'Obsidian' / 'Obsidian.exe',
+            Path('C:') / 'Program Files' / 'Obsidian' / 'Obsidian.exe',
+        ]
+    elif sys.platform == 'darwin':
+        possible_paths = [
+            Path('/Applications/Obsidian.app/Contents/MacOS/Obsidian'),
+        ]
+    else:  # Linux
+        possible_paths = [
+            Path('/usr/bin/obsidian'),
+            Path('/usr/local/bin/obsidian'),
+        ]
+    
+    for path in possible_paths:
+        if path.exists():
+            return str(path)
+    
+    return None
+
+def verify_api_key():
+    """Verifica se a API Key está correta"""
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return False
+    
+    provided_key = auth_header[7:]
+    config = load_config()
+    return provided_key == config.get('api_key')
+
+def require_auth(f):
+    """Decorator para verificar autenticação"""
+    def decorated_function(*args, **kwargs):
+        if not verify_api_key():
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+        return f(*args, **kwargs)
+    decorated_function.__name__ = f.__name__
+    return decorated_function
+
+# ==================== ENDPOINTS ====================
+
+@app.route('/health', methods=['GET'])
+def health():
+    """Verifica se o agente está online"""
+    return jsonify({
+        'status': 'online',
+        'version': '1.1',
+        'timestamp': datetime.now().isoformat(),
+    })
+
+@app.route('/obsidian/open', methods=['POST'])
+@require_auth
+def obsidian_open():
+    """Abre a aplicação Obsidian"""
+    try:
+        config = load_config()
+        obsidian_path = config.get('obsidian_path') or find_obsidian_path()
+        
+        if not obsidian_path or not Path(obsidian_path).exists():
+            return jsonify({
+                'success': False,
+                'error': 'Obsidian não encontrado no sistema'
+            }), 404
+        
+        subprocess.Popen([obsidian_path])
+        logger.info('Obsidian aberto com sucesso')
+        
+        return jsonify({
+            'success': True,
+            'message': 'Obsidian aberto com sucesso'
+        })
+    except Exception as e:
+        logger.error(f'Erro ao abrir Obsidian: {str(e)}')
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/file/read', methods=['POST'])
+@require_auth
+def file_read():
+    """Lê o conteúdo de um arquivo"""
+    try:
+        data = request.get_json()
+        file_path = data.get('path')
+        
+        if not file_path:
+            return jsonify({
+                'success': False,
+                'error': 'Caminho do arquivo não fornecido'
+            }), 400
+        
+        path = Path(file_path)
+        if not path.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Arquivo não encontrado: {file_path}'
+            }), 404
+        
+        with open(path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        logger.info(f'Arquivo lido: {file_path}')
+        
+        return jsonify({
+            'success': True,
+            'content': content,
+            'path': file_path
+        })
+    except Exception as e:
+        logger.error(f'Erro ao ler arquivo: {str(e)}')
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/file/write', methods=['POST'])
+@require_auth
+def file_write():
+    """Escreve conteúdo em um arquivo"""
+    try:
+        data = request.get_json()
+        file_path = data.get('path')
+        content = data.get('content', '')
+        
+        if not file_path:
+            return jsonify({
+                'success': False,
+                'error': 'Caminho do arquivo não fornecido'
+            }), 400
+        
+        path = Path(file_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        logger.info(f'Arquivo escrito: {file_path}')
+        
+        return jsonify({
+            'success': True,
+            'message': 'Arquivo escrito com sucesso',
+            'path': file_path
+        })
+    except Exception as e:
+        logger.error(f'Erro ao escrever arquivo: {str(e)}')
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/command/execute', methods=['POST'])
+@require_auth
+def command_execute():
+    """Executa um comando no sistema"""
+    try:
+        data = request.get_json()
+        command = data.get('command')
+        
+        if not command:
+            return jsonify({
+                'success': False,
+                'error': 'Comando não fornecido'
+            }), 400
+        
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        logger.info(f'Comando executado: {command}')
+        
+        return jsonify({
+            'success': result.returncode == 0,
+            'output': result.stdout,
+            'error': result.stderr if result.stderr else None,
+            'exit_code': result.returncode
+        })
+    except subprocess.TimeoutExpired:
+        logger.error('Timeout ao executar comando')
+        return jsonify({
+            'success': False,
+            'error': 'Timeout ao executar comando'
+        }), 504
+    except Exception as e:
+        logger.error(f'Erro ao executar comando: {str(e)}')
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/obsidian/notes', methods=['GET'])
+@require_auth
+def obsidian_notes():
+    """Lista todas as notas do vault"""
+    try:
+        # Implementar lógica para listar notas
+        # Por enquanto, retorna uma lista vazia
+        return jsonify({
+            'success': True,
+            'notes': [],
+            'count': 0
+        })
+    except Exception as e:
+        logger.error(f'Erro ao listar notas: {str(e)}')
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/config', methods=['GET'])
+def get_config():
+    """Retorna informações de configuração (sem API Key)"""
+    config = load_config()
+    return jsonify({
+        'port': config.get('port'),
+        'version': '1.1',
+        'obsidian_path': config.get('obsidian_path'),
+    })
+
+# ==================== MAIN ====================
+
+def main():
+    """Função principal"""
+    logger.info('Iniciando Obsidian Desktop Agent...')
+    
+    config = load_config()
+    logger.info('Configuração carregada')
+    logger.info(f'API Key: {config.get("api_key")}')
+    logger.info(f'Arquivo de configuração: {CONFIG_FILE}')
+    
+    port = config.get('port', 5001)
+    logger.info(f'Servidor rodando em http://localhost:{port}')
+    logger.info('Pressione Ctrl+C para parar')
+    
+    try:
+        app.run(
+            host='0.0.0.0',
+            port=port,
+            debug=False,
+            use_reloader=False
+        )
+    except KeyboardInterrupt:
+        logger.info('Agente parado pelo usuário')
+        sys.exit(0)
+
+if __name__ == '__main__':
+    main()
