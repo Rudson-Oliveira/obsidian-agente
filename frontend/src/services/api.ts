@@ -152,6 +152,78 @@ class ApiService {
       };
     }
   }
+
+  async createNote(title: string, content: string = ''): Promise<ApiResponse> {
+    try {
+      const response = await this.client.post('/obsidian/note/create', {
+        title,
+        content,
+      });
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.path,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Falha ao criar nota',
+      };
+    }
+  }
+
+  async searchNotes(query: string): Promise<ApiResponse> {
+    try {
+      const response = await this.client.post('/obsidian/note/search', {
+        query,
+      });
+      return {
+        success: response.data.success,
+        data: response.data.results,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Falha ao buscar notas',
+      };
+    }
+  }
+
+  async configureVault(vaultPath: string): Promise<ApiResponse> {
+    try {
+      const response = await this.client.post('/obsidian/vault/configure', {
+        vault_path: vaultPath,
+      });
+      return {
+        success: response.data.success,
+        message: response.data.message,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Falha ao configurar vault',
+      };
+    }
+  }
+
+  async intelligentProcess(text: string): Promise<ApiResponse> {
+    try {
+      const response = await this.client.post('/intelligent/process', {
+        text,
+      });
+      return {
+        success: response.data.success,
+        data: response.data.data,
+        message: response.data.response,
+        ...response.data,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Falha ao processar comando',
+      };
+    }
+  }
 }
 
 export default new ApiService();
