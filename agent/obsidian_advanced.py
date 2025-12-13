@@ -13,9 +13,9 @@ from typing import List, Dict, Optional
 class ObsidianAdvanced:
     """Classe para funcionalidades avançadas do Obsidian"""
     
-    def __init__(self, vault_path: str):
-        self.vault_path = Path(vault_path)
-        self.obsidian_folder = self.vault_path / '.obsidian'
+    def __init__(self, vault_path: str = None):
+        self.vault_path = Path(vault_path) if vault_path else None
+        self.obsidian_folder = self.vault_path / '.obsidian' if self.vault_path else None
     
     # ==================== FRONTMATTER ====================
     
@@ -119,12 +119,12 @@ class ObsidianAdvanced:
     
     # ==================== TAGS ====================
     
-    def extract_tags(self, content: str, frontmatter: Dict) -> List[str]:
+    def extract_tags(self, content: str, frontmatter: Dict = None) -> List[str]:
         """Extrai todas as tags de uma nota (inline e frontmatter)"""
         tags = set()
         
         # Tags do frontmatter
-        if 'tags' in frontmatter:
+        if frontmatter and 'tags' in frontmatter:
             fm_tags = frontmatter['tags']
             if isinstance(fm_tags, list):
                 tags.update(fm_tags)

@@ -4,6 +4,37 @@ Obsidian Knowledge Base
 Base de conhecimento completa sobre Obsidian para o agente inteligente
 """
 
+class ObsidianKnowledge:
+    """Classe para acessar a base de conhecimento do Obsidian"""
+    
+    def __init__(self):
+        self.features = OBSIDIAN_KNOWLEDGE
+    
+    def get_feature_info(self, feature_name):
+        """Retorna informações sobre um recurso específico"""
+        return self.features.get(feature_name, None)
+    
+    def get_popular_plugins(self):
+        """Retorna lista de plugins populares"""
+        plugins_info = self.features.get('plugins', {})
+        popular = plugins_info.get('popular_community', {})
+        return list(popular.keys())
+    
+    def search_knowledge(self, query):
+        """Busca na base de conhecimento"""
+        results = []
+        query_lower = query.lower()
+        
+        for key, value in self.features.items():
+            if query_lower in key.lower():
+                results.append({"key": key, "data": value})
+            elif isinstance(value, dict):
+                desc = value.get('description', '')
+                if query_lower in desc.lower():
+                    results.append({"key": key, "data": value})
+        
+        return results
+
 OBSIDIAN_KNOWLEDGE = {
     "vault_structure": {
         "description": "Estrutura de um vault do Obsidian",
