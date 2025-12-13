@@ -14,6 +14,7 @@ from pathlib import Path
 from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from intelligent_agent import IntelligentAgent
 
 # Configuração de logging
 logging.basicConfig(
@@ -25,6 +26,9 @@ logger = logging.getLogger(__name__)
 # Inicializar Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": ["*"]}})
+
+# Inicializar Agente Inteligente
+intelligent_agent = IntelligentAgent()
 
 # Configuração
 CONFIG_DIR = Path.home() / '.obsidian-agent'
@@ -444,14 +448,128 @@ def obsidian_vault_configure():
             'error': str(e)
         }), 500
 
+@app.route('/intelligent/process', methods=['POST'])
+@require_auth
+def intelligent_process():
+    """Processa comando em linguagem natural usando IA"""
+    try:
+        data = request.get_json()
+        text = data.get('text', '')
+        
+        if not text:
+            return jsonify({
+                'success': False,
+                'error': 'Texto não fornecido'
+            }), 400
+        
+        # Processar comando com IA
+        command_result = intelligent_agent.process_command(text)
+        command = command_result['command']
+        params = command_result['parameters']
+        
+        # Executar comando correspondente
+        api_result = {}
+        
+        if command == 'open_obsidian':
+            config = load_config()
+            obsidian_path = config.get('obsidian_path') or find_obsidian_path()
+            if obsidian_path and Path(obsidian_path).exists():
+                subprocess.Popen([obsidian_path])
+                api_result = {'success': True}
+            else:
+                api_result = {'success': False, 'error': 'Obsidian não encontrado'}
+        
+        elif command == 'list_notes':
+            config = load_config()
+            vault_path = config.get('vault_path')
+            if vault_path and Path(vault_path).exists():
+                notes = []
+                for md_file in Path(vault_path).rglob('*.md'):
+                    notes.append({
+                        'name': md_file.stem,
+                        'path': str(md_file.relative_to(vault_path))
+                    })
+                api_result = {'success': True, 'data': notes}
+            else:
+                api_result = {'success': False, 'error': 'Vault não configurado'}
+        
+        elif command == 'create_note':
+            title = params.get('title')
+            content = params.get('content', '')
+            if title:
+                config = load_config()
+                vault_path = config.get('vault_path')
+                if vault_path and Path(vault_path).exists():
+                    note_path = Path(vault_path) / f'{title}.md'
+                    if not note_path.exists():
+                        with open(note_path, 'w', encoding='utf-8') as f:
+                            f.write(content)
+                        api_result = {'success': True}
+                    else:
+                        api_result = {'success': False, 'error': 'Nota já existe'}
+                else:
+                    api_result = {'success': False, 'error': 'Vault não configurado'}
+            else:
+                api_result = {'success': False, 'error': 'Título não fornecido'}
+        
+        elif command == 'search_notes':
+            query = params.get('query', '')
+            if query:
+                config = load_config()
+                vault_path = config.get('vault_path')
+                if vault_path and Path(vault_path).exists():
+                    results = []
+                    for md_file in Path(vault_path).rglob('*.md'):
+                        try:
+                            with open(md_file, 'r', encoding='utf-8') as f:
+                                if query.lower() in f.read().lower():
+                                    results.append({'name': md_file.stem})
+                        except:
+                            continue
+                    api_result = {'success': True, 'data': results}
+                else:
+                    api_result = {'success': False, 'error': 'Vault não configurado'}
+            else:
+                api_result = {'success': False, 'error': 'Query não fornecida'}
+        
+        elif command == 'configure_vault':
+            vault_path = params.get('vault_path')
+            if vault_path and Path(vault_path).exists():
+                config = load_config()
+                config['vault_path'] = str(vault_path)
+                save_config(config)
+                api_result = {'success': True}
+            else:
+                api_result = {'success': False, 'error': 'Caminho inválido'}
+        
+        # Gerar resposta inteligente
+        response_text = intelligent_agent.generate_response(command_result, api_result)
+        
+        logger.info(f'Comando processado: {command}')
+        
+        return jsonify({
+            'success': True,
+            'command': command,
+            'response': response_text,
+            'data': api_result.get('data')
+        })
+    
+    except Exception as e:
+        logger.error(f'Erro ao processar comando: {str(e)}')
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/config', methods=['GET'])
 def get_config():
     """Retorna informações de configuração (sem API Key)"""
     config = load_config()
     return jsonify({
         'port': config.get('port'),
-        'version': '1.1',
+        'version': '2.0',
         'obsidian_path': config.get('obsidian_path'),
+        'features': ['intelligent_processing', 'nlp_commands', 'obsidian_knowledge']
     })
 
 # ==================== MAIN ====================
