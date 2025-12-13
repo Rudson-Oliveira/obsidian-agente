@@ -1,238 +1,170 @@
-# Referência da API - Obsidian Agente
+# 📚 Referência da API - Obsidian Agente v2.0
 
-## Base URL
+Esta documentação descreve os endpoints da API do Obsidian Agente.
 
+**URL Base:** `http://localhost:5001`
+
+---
+
+## 🔐 Autenticação
+
+Todas as requisições (exceto `/health`) exigem um token de autenticação no cabeçalho:
+
+`Authorization: Bearer <SUA_API_KEY>`
+
+---
+
+## 🧠 Endpoint Inteligente
+
+### `POST /intelligent/process`
+
+Processa um comando em linguagem natural e executa a ação correspondente.
+
+**Request Body:**
+
+```json
+{
+  "text": "Criar uma nova nota chamada Teste"
+}
 ```
-http://localhost:5001
+
+**Response (Sucesso):**
+
+```json
+{
+  "success": true,
+  "command": "create_note",
+  "response": "✅ Nota 'Teste' criada com sucesso!",
+  "data": null
+}
 ```
 
-## Autenticação
+**Response (Erro):**
 
-Todas as requisições devem incluir a chave de API no header:
-
+```json
+{
+  "success": false,
+  "error": "Texto não fornecido"
+}
 ```
-Authorization: Bearer YOUR_API_KEY
-```
 
-## Endpoints
+---
 
-### Health Check
+## ⚙️ Endpoints de Gerenciamento
 
-**GET** `/health`
+### `GET /health`
 
-Verifica se o agente está online e respondendo.
+Verifica se o agente está online.
 
 **Response:**
+
 ```json
 {
   "status": "online",
-  "version": "1.1",
-  "timestamp": "2025-12-13T15:20:00Z"
+  "version": "2.0"
 }
 ```
 
----
+### `GET /config`
 
-### Obsidian - Abrir
-
-**POST** `/obsidian/open`
-
-Abre a aplicação Obsidian.
-
-**Request:**
-```json
-{}
-```
+Retorna informações de configuração do agente.
 
 **Response:**
+
 ```json
 {
-  "success": true,
-  "message": "Obsidian aberto com sucesso"
+  "port": 5001,
+  "version": "2.0",
+  "obsidian_path": "C:\\Users\\...\\Obsidian.exe",
+  "features": [
+    "intelligent_processing",
+    "nlp_commands",
+    "obsidian_knowledge"
+  ]
 }
 ```
 
 ---
 
-### Arquivo - Ler
+## 📂 Endpoints de Vault
 
-**POST** `/file/read`
+### `POST /obsidian/vault/configure`
 
-Lê o conteúdo de um arquivo.
+Configura o caminho do vault do Obsidian.
 
-**Request:**
+**Request Body:**
+
 ```json
 {
-  "path": "C:\\Users\\rudpa\\Obsidian\\vault\\nota.md"
+  "vault_path": "C:\\Users\\...\\Meu Vault"
 }
 ```
 
-**Response:**
-```json
-{
-  "success": true,
-  "content": "# Minha Nota\n\nConteúdo da nota...",
-  "path": "C:\\Users\\rudpa\\Obsidian\\vault\\nota.md"
-}
-```
+### `GET /obsidian/vault/stats`
+
+Retorna estatísticas do vault (número de notas, palavras, links, etc.).
 
 ---
 
-### Arquivo - Escrever
+## 📝 Endpoints de Notas
 
-**POST** `/file/write`
-
-Escreve conteúdo em um arquivo.
-
-**Request:**
-```json
-{
-  "path": "C:\\Users\\rudpa\\Obsidian\\vault\\nova-nota.md",
-  "content": "# Nova Nota\n\nConteúdo aqui..."
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Arquivo escrito com sucesso",
-  "path": "C:\\Users\\rudpa\\Obsidian\\vault\\nova-nota.md"
-}
-```
-
----
-
-### Comando - Executar
-
-**POST** `/command/execute`
-
-Executa um comando no sistema.
-
-**Request:**
-```json
-{
-  "command": "dir C:\\Users\\rudpa\\Obsidian\\vault"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "output": "Listagem de arquivos...",
-  "exit_code": 0
-}
-```
-
----
-
-### Obsidian - Listar Notas
-
-**GET** `/obsidian/notes`
+### `GET /obsidian/notes`
 
 Lista todas as notas do vault.
 
-**Response:**
+### `POST /obsidian/note/create`
+
+Cria uma nova nota.
+
+**Request Body:**
+
 ```json
 {
-  "success": true,
-  "notes": [
-    {
-      "name": "nota1.md",
-      "path": "C:\\Users\\rudpa\\Obsidian\\vault\\nota1.md",
-      "created": "2025-12-13T10:00:00Z",
-      "modified": "2025-12-13T14:30:00Z"
-    }
-  ],
-  "count": 1
+  "title": "Nova Nota",
+  "content": "Conteúdo da nota"
+}
+```
+
+### `POST /obsidian/note/search`
+
+Busca notas por conteúdo.
+
+**Request Body:**
+
+```json
+{
+  "query": "termo de busca"
 }
 ```
 
 ---
 
-## Códigos de Erro
+## 🔗 Endpoints Avançados
 
-| Código | Descrição |
-|--------|-----------|
-| 200 | Sucesso |
-| 400 | Requisição inválida |
-| 401 | Não autorizado (API Key inválida) |
-| 404 | Recurso não encontrado |
-| 500 | Erro interno do servidor |
+### `POST /obsidian/advanced/backlinks`
 
----
+Encontra backlinks para uma nota específica.
 
-## Exemplos de Uso
+**Request Body:**
 
-### Python
-
-```python
-import requests
-
-BASE_URL = "http://localhost:5001"
-API_KEY = "BO_1JSygh7Ia961cOdYcoc42GhxCVil9A1qvZQWFZ2c"
-
-headers = {
-    "Authorization": f"Bearer {API_KEY}",
-    "Content-Type": "application/json"
+```json
+{
+  "note_name": "Nome da Nota"
 }
-
-# Health check
-response = requests.get(f"{BASE_URL}/health", headers=headers)
-print(response.json())
-
-# Ler arquivo
-response = requests.post(
-    f"{BASE_URL}/file/read",
-    headers=headers,
-    json={"path": "C:\\Users\\rudpa\\Obsidian\\vault\\nota.md"}
-)
-print(response.json())
 ```
 
-### JavaScript
+### `POST /obsidian/advanced/tags`
 
-```javascript
-const BASE_URL = "http://localhost:5001";
-const API_KEY = "BO_1JSygh7Ia961cOdYcoc42GhxCVil9A1qvZQWFZ2c";
+Encontra notas por uma tag específica.
 
-const headers = {
-  "Authorization": `Bearer ${API_KEY}`,
-  "Content-Type": "application/json"
-};
+**Request Body:**
 
-// Health check
-fetch(`${BASE_URL}/health`, { headers })
-  .then(res => res.json())
-  .then(data => console.log(data));
-
-// Ler arquivo
-fetch(`${BASE_URL}/file/read`, {
-  method: "POST",
-  headers,
-  body: JSON.stringify({
-    path: "C:\\Users\\rudpa\\Obsidian\\vault\\nota.md"
-  })
-})
-  .then(res => res.json())
-  .then(data => console.log(data));
+```json
+{
+  "tag": "minha-tag"
+}
 ```
 
----
+### `GET /obsidian/advanced/graph`
 
-## Rate Limiting
-
-Não há rate limiting configurado no momento. Para produção, recomenda-se implementar.
-
----
-
-## Changelog
-
-### v1.1
-- ✅ Endpoints básicos implementados
-- ✅ Autenticação por API Key
-- ✅ CORS configurado
-
-### v1.0
-- ✅ Versão inicial
+Gera dados para visualização de grafo do vault.
