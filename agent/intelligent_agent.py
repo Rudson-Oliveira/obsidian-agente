@@ -19,23 +19,26 @@ class AIProvider:
         self.context = context
         self.apis = context.get("apis", {})
     
-    def call_gemini(self, prompt):
-        api_key = self.apis.get("gemini", {}).get("key")
+    def call_openai(self, prompt):
+        api_key = self.apis.get("openai", {}).get("key")
         if not api_key: return None
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
-            r = requests.post(url, json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=30)
+            r = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={"model": "gpt-3.5-turbo", "messages": [{"role": "user", "content": prompt}], "max_tokens": 500},
+                timeout=30
+            )
             if r.status_code == 200:
-                return r.json().get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-        except: pass
+                return r.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+        except Exception as e:
+            print(f"Erro OpenAI: {e}")
         return None
     
     def get_response(self, prompt, provider="auto"):
-        if provider == "auto":
-            r = self.call_gemini(prompt)
-            if r: return r
-            return "Erro ao processar. Verifique as APIs."
-        return "Provedor nao reconhecido"
+        r = self.call_openai(prompt)
+        if r: return r
+        return "Erro ao processar. Verifique as APIs."
 
 class IntelligentAgent:
     def __init__(self):
@@ -53,7 +56,7 @@ class IntelligentAgent:
             "search_notes": [r"busc.*nota", r"procur.*nota"],
             "help": [r"ajuda", r"help", r"comandos"],
             "status": [r"status", r"estado"],
-            "ask_ai": [r"perguntar", r"pesquisar", r"me diga", r"me fale"]
+            "ask_ai": [r"perguntar", r"pesquisar", r"me diga", r"me fale", r"o que"]
         }
     
     def get_system_status(self):
@@ -86,7 +89,7 @@ class IntelligentAgent:
         if cmd == "status": return self.get_system_status()
         if cmd == "ask_ai":
             query = command_result["parameters"].get("query", "")
-            return self.ai_provider.get_response(f"Responda em portugues: {query}")
+            return self.ai_provider.get_response(f"Responda em portugues brasileiro de forma clara e concisa: {query}")
         if api_result.get("success"):
             return f"Comando {cmd} executado com sucesso!"
         return f"Erro: {api_result.get("error", "desconhecido")}"
