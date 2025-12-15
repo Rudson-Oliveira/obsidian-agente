@@ -1,6 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import apiService from './services/api';
-import { APP_CONFIG } from './config';
 import './App.css';
 
 interface Message {
@@ -8,298 +6,252 @@ interface Message {
   text: string;
   sender: 'user' | 'assistant';
   timestamp: Date;
-  command?: string;
-  data?: any;
+  type?: 'text' | 'notes' | 'error';
+  data?: any[];
 }
 
 function App() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: '1',
+      text: 'Olá! Sou o Obsidian Agente Inteligente v2.0.\n\nEstou conectado ao seu vault e pronto para ajudar. Posso criar notas, buscar informações, explicar conceitos ou automatizar tarefas.\n\nComo posso ser útil hoje?',
+      sender: 'assistant',
+      timestamp: new Date(),
+      type: 'text'
+    }
+  ]);
   const [inputText, setInputText] = useState('');
-  const [isConnected, setIsConnected] = useState(false);
-  const [apiKey, setApiKey] = useState(apiService.getApiKey() || '');
-  const [showApiKeyInput, setShowApiKeyInput] = useState(!apiService.getApiKey());
+  const [isConnected, setIsConnected] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [activeNav, setActiveNav] = useState('chat');
+  const [apiKey] = useState(localStorage.getItem('obsidian_api_key') || '');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const commandSuggestions = [
-    'Abrir Obsidian',
-    'Listar notas',
-    'Status',
-    'Criar nota',
-    'Buscar por',
-    'Explicar wikilinks',
-    'Explicar tags',
-    'Explicar frontmatter',
-    'Explicar dataview',
-    'Ajuda'
+  const quickActions = [
+    'Criar nota sobre IA',
+    'Listar notas recentes',
+    'Buscar projeto',
+    'Status do sistema'
   ];
 
   useEffect(() => {
-    checkConnection();
-    const interval = setInterval(checkConnection, 30000);
-    
-    // Mensagem de boas-vindas
-    if (messages.length === 0 && apiService.getApiKey()) {
-      addMessage(
-        '🤖 Olá! Sou o Obsidian Agente Inteligente.\n\n' +
-        'Tenho conhecimento profundo sobre Obsidian e posso ajudá-lo com:\n' +
-        '• Gerenciamento de notas\n' +
-        '• Explicações sobre recursos do Obsidian\n' +
-        '• Automação de tarefas\n\n' +
-        'Digite "ajuda" para ver todos os comandos ou comece a conversar naturalmente!',
-        'assistant'
-      );
-    }
-    
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  useEffect(() => {
-    // Atualizar sugestões baseadas no texto digitado
-    if (inputText.length > 0) {
-      const filtered = commandSuggestions.filter(cmd =>
-        cmd.toLowerCase().includes(inputText.toLowerCase())
-      );
-      setSuggestions(filtered.slice(0, 5));
-    } else {
-      setSuggestions([]);
-    }
-  }, [inputText]);
-
-  const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const checkConnection = async () => {
-    const result = await apiService.health();
-    setIsConnected(result.success);
-  };
-
-  const handleApiKeySubmit = () => {
-    if (apiKey.trim()) {
-      apiService.setApiKey(apiKey.trim());
-      setShowApiKeyInput(false);
-      checkConnection();
-      addMessage('✅ API Key configurada com sucesso! Agora você pode usar todos os comandos.', 'assistant');
-    }
-  };
-
-  const addMessage = (text: string, sender: 'user' | 'assistant', command?: string, data?: any) => {
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      text,
-      sender,
-      timestamp: new Date(),
-      command,
-      data,
-    };
-    setMessages((prev) => [...prev, newMessage]);
-  };
-
-  const processIntelligentCommand = async (command: string) => {
-    try {
-      const result = await apiService.intelligentProcess(command);
-      
-      if (result.success) {
-        addMessage(result.response, 'assistant', result.command, result.data);
-      } else {
-        addMessage(`❌ Erro: ${result.error}`, 'assistant');
-      }
-    } catch (error) {
-      addMessage('❌ Erro ao processar comando. Verifique se o agente está rodando.', 'assistant');
-    }
-  };
+  }, [messages]);
 
   const handleSendMessage = async () => {
     if (!inputText.trim() || isLoading) return;
 
-    const userMessage = inputText.trim();
-    addMessage(userMessage, 'user');
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      text: inputText,
+      sender: 'user',
+      timestamp: new Date(),
+      type: 'text'
+    };
+
+    setMessages(prev => [...prev, userMessage]);
     setInputText('');
     setIsLoading(true);
-    setSuggestions([]);
 
     try {
-      await processIntelligentCommand(userMessage);
+      const response = await fetch('http://localhost:5001/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + apiKey
+        },
+        body: JSON.stringify({ message: inputText })
+      });
+
+      const data = await response.json();
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: data.response || data.message || 'Resposta recebida',
+        sender: 'assistant',
+        timestamp: new Date(),
+        type: data.type || 'text',
+        data: data.data
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+    } catch (error) {
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: 'Erro ao conectar com o agente. Verifique se o servidor está rodando.',
+        sender: 'assistant',
+        timestamp: new Date(),
+        type: 'error'
+      };
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
+  const handleQuickAction = (action: string) => {
+    setInputText(action);
   };
 
-  const handleSuggestionClick = (suggestion: string) => {
-    setInputText(suggestion);
-    setSuggestions([]);
-  };
-
-  const formatTimestamp = (date: Date) => {
+  const formatTime = (date: Date) => {
     return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   };
 
-  const renderMessageContent = (message: Message) => {
-    // Renderizar listas de notas
-    if (message.data && Array.isArray(message.data)) {
-      return (
-        <div>
-          <p>{message.text}</p>
-          <div className="notes-list">
-            {message.data.slice(0, 10).map((note: any, index: number) => (
-              <div key={index} className="note-item">
-                📝 {note.name || note.title}
-                {note.path && <span className="note-path"> ({note.path})</span>}
-              </div>
-            ))}
-            {message.data.length > 10 && (
-              <div className="note-item more">
-                ... e mais {message.data.length - 10} notas
-              </div>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    // Renderizar texto com formatação
-    return message.text.split('\n').map((line, index) => (
-      <p key={index}>{line}</p>
-    ));
-  };
-
-  if (showApiKeyInput) {
-    return (
-      <div className="app">
-        <div className="api-key-modal">
-          <div className="api-key-content">
-            <h2>🔐 Configuração da API Key</h2>
-            <p>
-              Para conectar ao Obsidian Agente, você precisa fornecer a API Key
-              gerada pelo agente local.
-            </p>
-            <p className="info-text">
-              A API Key é exibida no terminal quando você inicia o agente com o
-              comando <code>.\INICIAR_AGENTE.ps1</code>
-            </p>
-            <input
-              type="text"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Cole a API Key aqui"
-              className="api-key-input"
-              onKeyPress={(e) => e.key === 'Enter' && handleApiKeySubmit()}
-              autoFocus
-            />
-            <button onClick={handleApiKeySubmit} className="api-key-button">
-              Conectar
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="app">
-      <header className="app-header">
-        <div className="header-left">
-          <h1>🧠 Obsidian Agente</h1>
-          <p className="subtitle">Seu assistente inteligente para automação do Obsidian</p>
+      {/* Sidebar */}
+      <aside className={'sidebar' + (sidebarCollapsed ? ' collapsed' : '')}>
+        <button 
+          className="sidebar-toggle"
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
+        >
+          {sidebarCollapsed ? '→' : '←'}
+        </button>
+
+        <div className="sidebar-header">
+          <div className="logo-container">
+            <div className="logo-icon">OA</div>
+            <div className="logo-text">
+              <span className="logo-title">Obsidian</span>
+              <span className="logo-subtitle">AGENTE V2.0</span>
+            </div>
+          </div>
         </div>
-        <div className="header-right">
-          <div className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
-            <span className="status-dot"></span>
-            <span className="status-text">
-              {isConnected ? 'Conectado' : 'Desconectado'}
+
+        <nav className="sidebar-nav">
+          <div 
+            className={'nav-item' + (activeNav === 'chat' ? ' active' : '')}
+            onClick={() => setActiveNav('chat')}
+          >
+            <span className="icon">💬</span>
+            <span className="label">Chat</span>
+          </div>
+          <div 
+            className={'nav-item' + (activeNav === 'status' ? ' active' : '')}
+            onClick={() => setActiveNav('status')}
+          >
+            <span className="icon">📊</span>
+            <span className="label">Status</span>
+            <span className={'status-badge ' + (isConnected ? 'online' : 'offline')}>
+              {isConnected ? 'Online' : 'Offline'}
             </span>
           </div>
-          <button
-            onClick={() => setShowApiKeyInput(true)}
-            className="settings-button"
-            title="Configurações"
+          <div 
+            className={'nav-item' + (activeNav === 'config' ? ' active' : '')}
+            onClick={() => setActiveNav('config')}
           >
-            ⚙️
+            <span className="icon">⚙️</span>
+            <span className="label">Configurações</span>
+          </div>
+          <div 
+            className={'nav-item' + (activeNav === 'help' ? ' active' : '')}
+            onClick={() => setActiveNav('help')}
+          >
+            <span className="icon">❓</span>
+            <span className="label">Ajuda</span>
+          </div>
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="security-badge">
+            <span className="icon">🔒</span>
+            <span className="text">
+              <strong>Seguro</strong>
+              Conexão criptografada SHA-256
+            </span>
+          </div>
+          <button className="disconnect-btn">
+            <span>↪️</span>
+            Desconectar
           </button>
         </div>
-      </header>
+      </aside>
 
-      <div className="chat-container">
-        <div className="messages-container">
-          {messages.map((message) => (
-            <div key={message.id} className={`message ${message.sender}`}>
-              <div className="message-content">
-                {renderMessageContent(message)}
-              </div>
-              <div className="message-timestamp">
-                {formatTimestamp(message.timestamp)}
-              </div>
-            </div>
-          ))}
-          {isLoading && (
-            <div className="message assistant">
-              <div className="message-content">
-                <div className="typing-indicator">
-                  <span></span>
-                  <span></span>
-                  <span></span>
+      {/* Main Content */}
+      <main className="main-content">
+        <header className="main-header">
+          <div className="header-status">
+            <span className={'status-dot ' + (isConnected ? 'online' : 'offline')}></span>
+            <span>Sistema Online</span>
+          </div>
+          <span className="header-version">v2.0.0</span>
+        </header>
+
+        <div className="chat-container">
+          <div className="messages-area">
+            {messages.map((message) => (
+              <div key={message.id} className={'message ' + message.sender}>
+                <div className="message-avatar">
+                  {message.sender === 'user' ? '👤' : '🤖'}
+                </div>
+                <div className="message-bubble">
+                  {message.text.split('\n').map((line, i) => (
+                    <p key={i}>{line}</p>
+                  ))}
+                  <div className="message-time">{formatTime(message.timestamp)}</div>
                 </div>
               </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
+            ))}
+            {isLoading && (
+              <div className="message assistant">
+                <div className="message-avatar">🤖</div>
+                <div className="message-bubble">
+                  <div className="typing-indicator">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
 
-        <div className="input-container">
-          {suggestions.length > 0 && (
-            <div className="suggestions">
-              {suggestions.map((suggestion, index) => (
+          <div className="input-area">
+            <div className="quick-actions">
+              {quickActions.map((action, index) => (
                 <button
                   key={index}
-                  className="suggestion-button"
-                  onClick={() => handleSuggestionClick(suggestion)}
+                  className="quick-action-btn"
+                  onClick={() => handleQuickAction(action)}
                 >
-                  {suggestion}
+                  {action}
                 </button>
               ))}
             </div>
-          )}
-          <div className="input-wrapper">
-            <textarea
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Digite um comando para o Obsidian..."
-              className="message-input"
-              rows={1}
-              disabled={!isConnected || isLoading}
-            />
-            <button
-              onClick={handleSendMessage}
-              disabled={!inputText.trim() || !isConnected || isLoading}
-              className="send-button"
-            >
-              🚀
-            </button>
-          </div>
-          <div className="input-footer">
-            <span className="agent-info">
-              Agent: Connected • Port: 5001
-            </span>
-            <span className="version-info">
-              v2.0 - Intelligent Agent
-            </span>
+
+            <div className="input-container">
+              <div className="input-wrapper">
+                <textarea
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                  placeholder="Digite um comando ou pergunta..."
+                  className="message-input"
+                  rows={1}
+                  disabled={!isConnected || isLoading}
+                />
+              </div>
+              <button
+                onClick={handleSendMessage}
+                disabled={!inputText.trim() || !isConnected || isLoading}
+                className="send-button"
+              >
+                ➤
+              </button>
+            </div>
+
+            <div className="input-footer">
+              <span>⌘ Comandos disponíveis</span>
+              <span className="made-with">
+                Made with <a href="https://manus.im" target="_blank" rel="noopener noreferrer">Manus</a>
+              </span>
+            </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

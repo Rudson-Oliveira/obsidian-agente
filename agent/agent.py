@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Obsidian Desktop Agent
-Agente local que fornece uma API REST para automação do Obsidian
+Agente local que fornece uma API REST para automaÃ§Ã£o do Obsidian
 """
 
 import os
@@ -16,7 +16,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from intelligent_agent import IntelligentAgent
 
-# Configuração de logging
+# ConfiguraÃ§Ã£o de logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -30,7 +30,7 @@ CORS(app, resources={r"/*": {"origins": ["*"]}})
 # Inicializar Agente Inteligente
 intelligent_agent = IntelligentAgent()
 
-# Configuração
+# ConfiguraÃ§Ã£o
 CONFIG_DIR = Path.home() / '.obsidian-agent'
 CONFIG_FILE = CONFIG_DIR / 'config.json'
 DEFAULT_CONFIG = {
@@ -40,7 +40,7 @@ DEFAULT_CONFIG = {
 }
 
 def load_config():
-    """Carrega configuração do arquivo ou cria uma nova"""
+    """Carrega configuraÃ§Ã£o do arquivo ou cria uma nova"""
     if CONFIG_FILE.exists():
         with open(CONFIG_FILE, 'r') as f:
             return json.load(f)
@@ -51,7 +51,7 @@ def load_config():
         return DEFAULT_CONFIG
 
 def save_config(config):
-    """Salva configuração no arquivo"""
+    """Salva configuraÃ§Ã£o no arquivo"""
     CONFIG_DIR.mkdir(exist_ok=True)
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=2)
@@ -80,7 +80,7 @@ def find_obsidian_path():
     return None
 
 def verify_api_key():
-    """Verifica se a API Key está correta"""
+    """Verifica se a API Key estÃ¡ correta"""
     auth_header = request.headers.get('Authorization', '')
     if not auth_header.startswith('Bearer '):
         return False
@@ -90,7 +90,7 @@ def verify_api_key():
     return provided_key == config.get('api_key')
 
 def require_auth(f):
-    """Decorator para verificar autenticação"""
+    """Decorator para verificar autenticaÃ§Ã£o"""
     def decorated_function(*args, **kwargs):
         if not verify_api_key():
             return jsonify({'success': False, 'error': 'Unauthorized'}), 401
@@ -102,7 +102,7 @@ def require_auth(f):
 
 @app.route('/health', methods=['GET'])
 def health():
-    """Verifica se o agente está online"""
+    """Verifica se o agente estÃ¡ online"""
     return jsonify({
         'status': 'online',
         'version': '1.1',
@@ -112,7 +112,7 @@ def health():
 @app.route('/obsidian/open', methods=['POST'])
 @require_auth
 def obsidian_open():
-    """Abre a aplicação Obsidian"""
+    """Abre a aplicaÃ§Ã£o Obsidian"""
     try:
         config = load_config()
         obsidian_path = config.get('obsidian_path') or find_obsidian_path()
@@ -120,7 +120,7 @@ def obsidian_open():
         if not obsidian_path or not Path(obsidian_path).exists():
             return jsonify({
                 'success': False,
-                'error': 'Obsidian não encontrado no sistema'
+                'error': 'Obsidian nÃ£o encontrado no sistema'
             }), 404
         
         subprocess.Popen([obsidian_path])
@@ -140,7 +140,7 @@ def obsidian_open():
 @app.route('/file/read', methods=['POST'])
 @require_auth
 def file_read():
-    """Lê o conteúdo de um arquivo"""
+    """LÃª o conteÃºdo de um arquivo"""
     try:
         data = request.get_json()
         file_path = data.get('path')
@@ -148,14 +148,14 @@ def file_read():
         if not file_path:
             return jsonify({
                 'success': False,
-                'error': 'Caminho do arquivo não fornecido'
+                'error': 'Caminho do arquivo nÃ£o fornecido'
             }), 400
         
         path = Path(file_path)
         if not path.exists():
             return jsonify({
                 'success': False,
-                'error': f'Arquivo não encontrado: {file_path}'
+                'error': f'Arquivo nÃ£o encontrado: {file_path}'
             }), 404
         
         with open(path, 'r', encoding='utf-8') as f:
@@ -178,7 +178,7 @@ def file_read():
 @app.route('/file/write', methods=['POST'])
 @require_auth
 def file_write():
-    """Escreve conteúdo em um arquivo"""
+    """Escreve conteÃºdo em um arquivo"""
     try:
         data = request.get_json()
         file_path = data.get('path')
@@ -187,7 +187,7 @@ def file_write():
         if not file_path:
             return jsonify({
                 'success': False,
-                'error': 'Caminho do arquivo não fornecido'
+                'error': 'Caminho do arquivo nÃ£o fornecido'
             }), 400
         
         path = Path(file_path)
@@ -221,7 +221,7 @@ def command_execute():
         if not command:
             return jsonify({
                 'success': False,
-                'error': 'Comando não fornecido'
+                'error': 'Comando nÃ£o fornecido'
             }), 400
         
         result = subprocess.run(
@@ -264,7 +264,7 @@ def obsidian_notes():
         if not vault_path or not Path(vault_path).exists():
             return jsonify({
                 'success': False,
-                'error': 'Caminho do vault não configurado ou não encontrado'
+                'error': 'Caminho do vault nÃ£o configurado ou nÃ£o encontrado'
             }), 404
         
         notes = []
@@ -305,7 +305,7 @@ def obsidian_note_create():
         if not title:
             return jsonify({
                 'success': False,
-                'error': 'Título da nota não fornecido'
+                'error': 'TÃ­tulo da nota nÃ£o fornecido'
             }), 400
         
         config = load_config()
@@ -314,7 +314,7 @@ def obsidian_note_create():
         if not vault_path or not Path(vault_path).exists():
             return jsonify({
                 'success': False,
-                'error': 'Caminho do vault não configurado ou não encontrado'
+                'error': 'Caminho do vault nÃ£o configurado ou nÃ£o encontrado'
             }), 404
         
         # Criar arquivo da nota
@@ -323,7 +323,7 @@ def obsidian_note_create():
         if note_path.exists():
             return jsonify({
                 'success': False,
-                'error': f'Nota "{title}" já existe'
+                'error': f'Nota "{title}" jÃ¡ existe'
             }), 409
         
         with open(note_path, 'w', encoding='utf-8') as f:
@@ -346,7 +346,7 @@ def obsidian_note_create():
 @app.route('/obsidian/note/search', methods=['POST'])
 @require_auth
 def obsidian_note_search():
-    """Busca conteúdo nas notas do vault"""
+    """Busca conteÃºdo nas notas do vault"""
     try:
         data = request.get_json()
         query = data.get('query', '').lower()
@@ -354,7 +354,7 @@ def obsidian_note_search():
         if not query:
             return jsonify({
                 'success': False,
-                'error': 'Termo de busca não fornecido'
+                'error': 'Termo de busca nÃ£o fornecido'
             }), 400
         
         config = load_config()
@@ -363,7 +363,7 @@ def obsidian_note_search():
         if not vault_path or not Path(vault_path).exists():
             return jsonify({
                 'success': False,
-                'error': 'Caminho do vault não configurado ou não encontrado'
+                'error': 'Caminho do vault nÃ£o configurado ou nÃ£o encontrado'
             }), 404
         
         results = []
@@ -420,14 +420,14 @@ def obsidian_vault_configure():
         if not vault_path:
             return jsonify({
                 'success': False,
-                'error': 'Caminho do vault não fornecido'
+                'error': 'Caminho do vault nÃ£o fornecido'
             }), 400
         
         path = Path(vault_path)
         if not path.exists() or not path.is_dir():
             return jsonify({
                 'success': False,
-                'error': f'Diretório não encontrado: {vault_path}'
+                'error': f'DiretÃ³rio nÃ£o encontrado: {vault_path}'
             }), 404
         
         config = load_config()
@@ -459,7 +459,7 @@ def intelligent_process():
         if not text:
             return jsonify({
                 'success': False,
-                'error': 'Texto não fornecido'
+                'error': 'Texto nÃ£o fornecido'
             }), 400
         
         # Processar comando com IA
@@ -477,7 +477,7 @@ def intelligent_process():
                 subprocess.Popen([obsidian_path])
                 api_result = {'success': True}
             else:
-                api_result = {'success': False, 'error': 'Obsidian não encontrado'}
+                api_result = {'success': False, 'error': 'Obsidian nÃ£o encontrado'}
         
         elif command == 'list_notes':
             config = load_config()
@@ -491,7 +491,7 @@ def intelligent_process():
                     })
                 api_result = {'success': True, 'data': notes}
             else:
-                api_result = {'success': False, 'error': 'Vault não configurado'}
+                api_result = {'success': False, 'error': 'Vault nÃ£o configurado'}
         
         elif command == 'create_note':
             title = params.get('title')
@@ -506,11 +506,11 @@ def intelligent_process():
                             f.write(content)
                         api_result = {'success': True}
                     else:
-                        api_result = {'success': False, 'error': 'Nota já existe'}
+                        api_result = {'success': False, 'error': 'Nota jÃ¡ existe'}
                 else:
-                    api_result = {'success': False, 'error': 'Vault não configurado'}
+                    api_result = {'success': False, 'error': 'Vault nÃ£o configurado'}
             else:
-                api_result = {'success': False, 'error': 'Título não fornecido'}
+                api_result = {'success': False, 'error': 'TÃ­tulo nÃ£o fornecido'}
         
         elif command == 'search_notes':
             query = params.get('query', '')
@@ -528,9 +528,9 @@ def intelligent_process():
                             continue
                     api_result = {'success': True, 'data': results}
                 else:
-                    api_result = {'success': False, 'error': 'Vault não configurado'}
+                    api_result = {'success': False, 'error': 'Vault nÃ£o configurado'}
             else:
-                api_result = {'success': False, 'error': 'Query não fornecida'}
+                api_result = {'success': False, 'error': 'Query nÃ£o fornecida'}
         
         elif command == 'configure_vault':
             vault_path = params.get('vault_path')
@@ -540,7 +540,7 @@ def intelligent_process():
                 save_config(config)
                 api_result = {'success': True}
             else:
-                api_result = {'success': False, 'error': 'Caminho inválido'}
+                api_result = {'success': False, 'error': 'Caminho invÃ¡lido'}
         
         # Gerar resposta inteligente
         response_text = intelligent_agent.generate_response(command_result, api_result)
@@ -563,7 +563,7 @@ def intelligent_process():
 
 @app.route('/config', methods=['GET'])
 def get_config():
-    """Retorna informações de configuração (sem API Key)"""
+    """Retorna informaÃ§Ãµes de configuraÃ§Ã£o (sem API Key)"""
     config = load_config()
     return jsonify({
         'port': config.get('port'),
@@ -575,13 +575,13 @@ def get_config():
 # ==================== MAIN ====================
 
 def main():
-    """Função principal"""
+    """FunÃ§Ã£o principal"""
     logger.info('Iniciando Obsidian Desktop Agent...')
     
     config = load_config()
-    logger.info('Configuração carregada')
+    logger.info('ConfiguraÃ§Ã£o carregada')
     logger.info(f'API Key: {config.get("api_key")}')
-    logger.info(f'Arquivo de configuração: {CONFIG_FILE}')
+    logger.info(f'Arquivo de configuraÃ§Ã£o: {CONFIG_FILE}')
     
     port = config.get('port', 5001)
     logger.info(f'Servidor rodando em http://localhost:{port}')
@@ -595,8 +595,10 @@ def main():
             use_reloader=False
         )
     except KeyboardInterrupt:
-        logger.info('Agente parado pelo usuário')
+        logger.info('Agente parado pelo usuÃ¡rio')
         sys.exit(0)
+
 
 if __name__ == '__main__':
     main()
+
