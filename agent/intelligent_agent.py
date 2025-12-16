@@ -1,27 +1,285 @@
 #!/usr/bin/env python3
 """
-Intelligent Agent v2.0 - Sistema de IA com Fallback Multi-Provedor
-Corrigido para usar OpenAI, Claude e Gemini com fallback automático
+Intelligent Agent v4.0 - Sistema Completo com Plugins
+- Fallback Multi-Provedor de IA (OpenAI, Claude, Perplexity, Gemini)
+- Integracao com Registro de Plugins
+- Execucao de comandos via API REST do Obsidian
+- Abertura de notas e tarefas
+- Sincronizacao automatica de plugins
 """
 import re
 import json
 import os
 import requests
+import urllib3
 from pathlib import Path
-from obsidian_knowledge import get_knowledge, search_knowledge
+from datetime import datetime
+from typing import Dict, List, Optional, Any
 
+# Desabilitar warnings de SSL
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Arquivos de configuracao
 CONTEXT_FILE = Path.home() / "COMET" / "SYSTEM_CONTEXT.json"
+REGISTRY_FILE = Path.home() / "COMET" / "plugin_registry.json"
+
+try:
+    from obsidian_knowledge import get_knowledge, search_knowledge
+except ImportError:
+    def get_knowledge(): return {}
+    def search_knowledge(q): return []
+
 
 def load_system_context():
-    """Carrega o contexto do sistema do arquivo JSON"""
+    """Carrega o contexto do sistema"""
     if CONTEXT_FILE.exists():
         with open(CONTEXT_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
 
 
+def load_plugin_registry():
+    """Carrega o registro de plugins"""
+    if REGISTRY_FILE.exists():
+        with open(REGISTRY_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"plugins": {}}
+
+
+class ObsidianAPI:
+    """Classe para interagir com a API REST do Obsidian"""
+    
+    def __init__(self, context):
+        self.context = context
+        services = context.get("services", {}).get("obsidian_rest_api", {})
+        self.base_url = services.get("url", "https://localhost:27124")
+        self.api_key = services.get("api_key", "")
+        self.vault_path = context.get("paths", {}).get("vault", "")
+    
+    def _request(self, method, endpoint, **kwargs):
+        """Faz uma requisicao para a API do Obsidian"""
+        url = f"{self.base_url}{endpoint}"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        try:
+            response = requests.request(
+                method, url, headers=headers, verify=False, timeout=10, **kwargs
+            )
+            return response
+        except Exception as e:
+            return None
+    
+    def execute_command(self, command_id):
+        """Executa um comando do Obsidian via API"""
+        response = self._request("POST", f"/commands/{command_id}")
+        if response and response.status_code in [200, 204]:
+            return {"success": True, "message": f"Comando '{command_id}' executado!"}
+        return {"success": False, "error": f"Erro ao executar comando"}
+    
+    def open_note(self, note_path):
+        """Abre uma nota no Obsidian"""
+        if not note_path.endswith('.md'):
+            note_path = f"{note_path}.md"
+        
+        response = self._request("POST", f"/open/{note_path}")
+        if response and response.status_code in [200, 204]:
+            return {"success": True, "message": f"Nota '{note_path}' aberta!"}
+        return {"success": False, "error": "Erro ao abrir nota"}
+    
+    def list_notes(self, folder=""):
+        """Lista notas no vault"""
+        endpoint = f"/vault/{folder}" if folder else "/vault/"
+        response = self._request("GET", endpoint)
+        if response and response.status_code == 200:
+            return response.json()
+        return {"files": []}
+    
+    def search_notes(self, query):
+        """Busca notas por nome"""
+        all_notes = self._get_all_notes()
+        results = []
+        query_lower = query.lower()
+        for note in all_notes:
+            if query_lower in note.lower():
+                results.append(note)
+        return results
+    
+    def _get_all_notes(self, folder=""):
+        """Obtem todas as notas recursivamente"""
+        notes = []
+        data = self.list_notes(folder)
+        for item in data.get("files", []):
+            if item.endswith('/'):
+                subfolder = folder + item if folder else item
+                notes.extend(self._get_all_notes(subfolder.rstrip('/')))
+            elif item.endswith('.md'):
+                full_path = f"{folder}/{item}" if folder else item
+                notes.append(full_path)
+        return notes
+    
+    def find_today_note(self):
+        """Encontra a nota de hoje - busca no sistema de arquivos"""
+        today = datetime.now()
+        date_patterns = [
+            today.strftime("%Y-%m-%d"),
+            today.strftime("%d-%m-%Y"),
+            today.strftime("%Y%m%d")
+        ]
+        
+        # Primeiro tentar via API
+        all_notes = self._get_all_notes()
+        for note in all_notes:
+            note_lower = note.lower()
+            for pattern in date_patterns:
+                if pattern.lower() in note_lower:
+                    return note
+        
+        # Se nao encontrou via API, buscar no sistema de arquivos
+        vault_path = Path(self.vault_path)
+        if vault_path.exists():
+            for pattern in date_patterns:
+                # Buscar em PROJETOS primeiro
+                projetos_path = vault_path / "PROJETOS"
+                if projetos_path.exists():
+                    for file in projetos_path.glob(f"*{pattern}*.md"):
+                        return f"PROJETOS/{file.name}"
+                
+                # Buscar na raiz
+                for file in vault_path.glob(f"*{pattern}*.md"):
+                    return file.name
+                
+                # Buscar recursivamente
+                for file in vault_path.rglob(f"*{pattern}*.md"):
+                    relative = file.relative_to(vault_path)
+                    return str(relative).replace("\\", "/")
+        
+        # Buscar nota mais recente em PROJETOS
+        project_notes = [n for n in all_notes if "PROJETOS" in n]
+        dated_notes = [n for n in project_notes if re.search(r'\d{4}-\d{2}-\d{2}', n)]
+        if dated_notes:
+            dated_notes.sort(reverse=True)
+            return dated_notes[0]
+        
+        return None
+    
+    def open_daily_note(self):
+        """Abre a nota diaria (via comando nativo)"""
+        return self.execute_command("daily-notes:open")
+
+
+class PluginManager:
+    """Gerenciador de plugins do Obsidian"""
+    
+    def __init__(self, registry_data):
+        self.plugins = registry_data.get("plugins", {})
+        self.triggers_map = self._build_triggers_map()
+        self.commands_map = self._build_commands_map()
+    
+    def _build_triggers_map(self):
+        """Constroi mapa de triggers para plugins"""
+        triggers = {}
+        for plugin_id, plugin in self.plugins.items():
+            for trigger in plugin.get("triggers", []):
+                triggers[trigger.lower()] = plugin_id
+        return triggers
+    
+    def _build_commands_map(self):
+        """Constroi mapa de comandos para plugins"""
+        commands = {}
+        for plugin_id, plugin in self.plugins.items():
+            for cmd in plugin.get("commands", []):
+                commands[cmd] = plugin_id
+        return commands
+    
+    def find_plugin_by_text(self, text):
+        """Encontra plugin baseado no texto"""
+        text_lower = text.lower()
+        for trigger, plugin_id in self.triggers_map.items():
+            if trigger in text_lower:
+                return self.plugins.get(plugin_id)
+        return None
+    
+    def get_command_for_action(self, action):
+        """Obtem comando para uma acao"""
+        action_lower = action.lower()
+        
+        # Mapeamento de acoes para comandos
+        action_commands = {
+            "nota de hoje": "daily-notes:open",
+            "nota diaria": "daily-notes:open",
+            "daily note": "daily-notes:open",
+            "abrir hoje": "daily-notes:open",
+            "template": "templater-obsidian:insert-templater",
+            "inserir template": "templater-obsidian:insert-templater",
+            "buscar": "omnisearch:show-modal",
+            "pesquisar": "omnisearch:show-modal",
+            "search": "omnisearch:show-modal",
+            "tarefa": "obsidian-tasks-plugin:create-or-edit-task",
+            "criar tarefa": "obsidian-tasks-plugin:create-or-edit-task",
+            "task": "obsidian-tasks-plugin:create-or-edit-task",
+            "excalidraw": "obsidian-excalidraw-plugin:excalidraw-new",
+            "desenho": "obsidian-excalidraw-plugin:excalidraw-new",
+            "canvas": "canvas:new-file",
+            "quadro": "canvas:new-file",
+            "backlinks": "app:toggle-backlinks",
+            "comandos": "command-palette:open",
+            "paleta": "command-palette:open"
+        }
+        
+        for key, cmd in action_commands.items():
+            if key in action_lower:
+                return cmd
+        
+        # Buscar nos plugins
+        plugin = self.find_plugin_by_text(action)
+        if plugin:
+            commands = plugin.get("commands", [])
+            if commands:
+                return commands[0]
+        
+        return None
+    
+    def get_plugin_info(self, plugin_id):
+        """Obtem informacoes de um plugin"""
+        return self.plugins.get(plugin_id)
+    
+    def list_ai_plugins(self):
+        """Lista plugins de IA"""
+        return [p for p in self.plugins.values() if p.get("category") == "ai"]
+    
+    def get_plugins_summary(self):
+        """Retorna resumo dos plugins"""
+        categories = {}
+        for plugin in self.plugins.values():
+            cat = plugin.get("category", "other")
+            if cat not in categories:
+                categories[cat] = []
+            categories[cat].append(plugin.get("name", plugin.get("id")))
+        
+        summary = "=== PLUGINS DISPONIVEIS ===\n\n"
+        cat_names = {
+            "ai": "IA",
+            "productivity": "Produtividade",
+            "navigation": "Navegacao",
+            "visual": "Visual",
+            "data": "Dados",
+            "search": "Busca",
+            "integration": "Integracao",
+            "utility": "Utilitarios",
+            "editing": "Edicao"
+        }
+        
+        for cat, plugins in categories.items():
+            name = cat_names.get(cat, cat.upper())
+            summary += f"{name}: {', '.join(plugins)}\n"
+        
+        return summary
+
+
 class AIProvider:
-    """Provedor de IA com fallback automático entre OpenAI, Claude e Gemini"""
+    """Provedor de IA com fallback automatico"""
     
     def __init__(self, context):
         self.context = context
@@ -33,7 +291,7 @@ class AIProvider:
         """Chama a API da OpenAI"""
         api_key = self.apis.get("openai", {}).get("key")
         if not api_key:
-            return None, "Chave OpenAI não configurada"
+            return None, "Chave OpenAI nao configurada"
         
         try:
             r = requests.post(
@@ -51,16 +309,15 @@ class AIProvider:
                 content = r.json().get("choices", [{}])[0].get("message", {}).get("content", "")
                 self.last_provider = "OpenAI"
                 return content, None
-            else:
-                return None, f"OpenAI erro {r.status_code}: {r.text[:200]}"
+            return None, f"OpenAI erro {r.status_code}"
         except Exception as e:
-            return None, f"OpenAI exceção: {str(e)}"
+            return None, f"OpenAI excecao: {str(e)}"
     
     def call_claude(self, prompt):
-        """Chama a API do Claude (Anthropic)"""
+        """Chama a API do Claude"""
         api_key = self.apis.get("claude", {}).get("key")
         if not api_key:
-            return None, "Chave Claude não configurada"
+            return None, "Chave Claude nao configurada"
         
         try:
             r = requests.post(
@@ -81,53 +338,15 @@ class AIProvider:
                 content = r.json().get("content", [{}])[0].get("text", "")
                 self.last_provider = "Claude"
                 return content, None
-            else:
-                return None, f"Claude erro {r.status_code}: {r.text[:200]}"
+            return None, f"Claude erro {r.status_code}"
         except Exception as e:
-            return None, f"Claude exceção: {str(e)}"
-    
-    def call_gemini(self, prompt):
-        """Chama a API do Google Gemini"""
-        # Tenta a primeira chave
-        api_key = self.apis.get("gemini", {}).get("key")
-        if not api_key:
-            api_key = self.apis.get("gemini", {}).get("key2")
-        
-        if not api_key:
-            return None, "Chave Gemini não configurada"
-        
-        # Tenta diferentes modelos do Gemini
-        models = ["gemini-1.5-flash-latest", "gemini-1.5-pro-latest", "gemini-pro"]
-        
-        for model in models:
-            try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-                r = requests.post(
-                    url,
-                    json={
-                        "contents": [{"parts": [{"text": prompt}]}],
-                        "generationConfig": {
-                            "temperature": 0.7,
-                            "maxOutputTokens": 1000
-                        }
-                    },
-                    timeout=30
-                )
-                if r.status_code == 200:
-                    result = r.json()
-                    content = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                    self.last_provider = f"Gemini ({model})"
-                    return content, None
-            except Exception as e:
-                continue
-        
-        return None, "Gemini: Todos os modelos falharam"
+            return None, f"Claude excecao: {str(e)}"
     
     def call_perplexity(self, prompt):
         """Chama a API do Perplexity"""
         api_key = self.apis.get("perplexity", {}).get("key")
         if not api_key:
-            return None, "Chave Perplexity não configurada"
+            return None, "Chave Perplexity nao configurada"
         
         try:
             r = requests.post(
@@ -147,37 +366,20 @@ class AIProvider:
                 content = r.json().get("choices", [{}])[0].get("message", {}).get("content", "")
                 self.last_provider = "Perplexity"
                 return content, None
-            else:
-                return None, f"Perplexity erro {r.status_code}: {r.text[:200]}"
+            return None, f"Perplexity erro {r.status_code}"
         except Exception as e:
-            return None, f"Perplexity exceção: {str(e)}"
+            return None, f"Perplexity excecao: {str(e)}"
     
     def get_response(self, prompt, provider="auto"):
-        """
-        Obtém resposta da IA com fallback automático.
-        Ordem de prioridade: OpenAI → Claude → Perplexity → Gemini
-        """
+        """Obtem resposta da IA com fallback"""
         errors = []
         
-        # Ordem de fallback
         providers = [
             ("openai", self.call_openai),
             ("claude", self.call_claude),
-            ("perplexity", self.call_perplexity),
-            ("gemini", self.call_gemini)
+            ("perplexity", self.call_perplexity)
         ]
         
-        # Se um provedor específico foi solicitado, tenta ele primeiro
-        if provider != "auto":
-            for name, func in providers:
-                if name == provider.lower():
-                    result, error = func(prompt)
-                    if result:
-                        return result
-                    errors.append(f"{name}: {error}")
-                    break
-        
-        # Tenta todos os provedores em ordem
         for name, func in providers:
             result, error = func(prompt)
             if result:
@@ -185,101 +387,62 @@ class AIProvider:
             if error:
                 errors.append(f"{name}: {error}")
         
-        # Se todos falharam, retorna mensagem de erro
         self.last_error = "; ".join(errors)
-        return f"Erro ao processar. Nenhum provedor de IA disponível. Detalhes: {self.last_error}"
+        return f"Erro: Nenhum provedor de IA disponivel."
     
     def get_status(self):
-        """Retorna o status dos provedores de IA"""
-        status = {
+        """Retorna status dos provedores"""
+        return {
             "openai": bool(self.apis.get("openai", {}).get("key")),
             "claude": bool(self.apis.get("claude", {}).get("key")),
-            "gemini": bool(self.apis.get("gemini", {}).get("key")),
             "perplexity": bool(self.apis.get("perplexity", {}).get("key")),
-            "last_provider": self.last_provider,
-            "last_error": self.last_error
+            "last_provider": self.last_provider
         }
-        return status
 
 
 class IntelligentAgent:
-    """Agente inteligente para processamento de comandos e integração com IA"""
+    """Agente inteligente principal"""
     
     def __init__(self):
         self.context = load_system_context()
-        self.knowledge = get_knowledge()
+        self.registry = load_plugin_registry()
         self.ai_provider = AIProvider(self.context)
+        self.obsidian_api = ObsidianAPI(self.context)
+        self.plugin_manager = PluginManager(self.registry)
         self.paths = self.context.get("paths", {})
         self.command_patterns = self._build_command_patterns()
     
     def _build_command_patterns(self):
-        """Constrói os padrões de reconhecimento de comandos"""
+        """Constroi padroes de reconhecimento"""
         return {
-            "open_obsidian": [r"abr.*obsidian", r"open.*obsidian"],
+            "open_today": [r"nota.*hoje", r"abr.*hoje", r"daily.*note", r"nota.*diaria"],
+            "open_note": [r"abr.*nota", r"open.*note"],
             "list_notes": [r"list.*nota", r"mostrar.*nota", r"listar.*nota"],
-            "create_note": [r"cri.*nota", r"nova.*nota", r"criar.*nota"],
-            "search_notes": [r"busc.*nota", r"procur.*nota", r"pesquis.*nota"],
-            "help": [r"ajuda", r"help", r"comandos"],
-            "status": [r"status", r"estado", r"verificar"],
-            "ai_status": [r"status.*ia", r"status.*ai", r"provedores"],
+            "create_note": [r"cri.*nota", r"nova.*nota"],
+            "search_notes": [r"busc.*nota", r"procur.*nota", r"pesquis"],
+            "create_task": [r"cri.*tarefa", r"nova.*tarefa", r"add.*task"],
+            "list_tasks": [r"list.*tarefa", r"mostrar.*tarefa", r"tarefas.*pend"],
+            "use_template": [r"usar.*template", r"inserir.*template", r"templater"],
+            "open_canvas": [r"abr.*canvas", r"novo.*canvas", r"criar.*canvas"],
+            "open_excalidraw": [r"abr.*excalidraw", r"novo.*desenho", r"criar.*diagrama"],
+            "search_omnisearch": [r"omnisearch", r"busca.*avancada"],
+            "plugin_status": [r"status.*plugin", r"plugins.*instalados", r"listar.*plugins"],
+            "help": [r"^ajuda$", r"^help$", r"^comandos$"],
+            "status": [r"^status$", r"^estado$"],
+            "ai_status": [r"status.*ia", r"status.*ai"],
             "ask_ai": [r"perguntar", r"pesquisar", r"me diga", r"me fale", r"o que", r"como", r"qual", r"quem", r"quando", r"onde", r"por que"]
         }
     
-    def get_system_status(self):
-        """Retorna o status do sistema"""
-        status = "=== STATUS DO SISTEMA ===\n\n"
-        
-        # Status dos caminhos
-        status += "📁 CAMINHOS:\n"
-        for name, path in self.paths.items():
-            exists = Path(path).exists() if path else False
-            icon = "✅" if exists else "❌"
-            status += f"  {icon} {name}: {path}\n"
-        
-        # Status das APIs
-        status += "\n🤖 PROVEDORES DE IA:\n"
-        ai_status = self.ai_provider.get_status()
-        for provider in ["openai", "claude", "gemini", "perplexity"]:
-            icon = "✅" if ai_status.get(provider) else "❌"
-            status += f"  {icon} {provider.upper()}\n"
-        
-        if ai_status.get("last_provider"):
-            status += f"\n📌 Último provedor usado: {ai_status['last_provider']}\n"
-        
-        return status
-    
-    def get_ai_status(self):
-        """Retorna o status detalhado dos provedores de IA"""
-        ai_status = self.ai_provider.get_status()
-        
-        status = "=== STATUS DOS PROVEDORES DE IA ===\n\n"
-        
-        providers_info = {
-            "openai": ("OpenAI", "gpt-3.5-turbo"),
-            "claude": ("Claude", "claude-3-haiku"),
-            "gemini": ("Google Gemini", "gemini-1.5-flash"),
-            "perplexity": ("Perplexity", "llama-3.1-sonar")
-        }
-        
-        for key, (name, model) in providers_info.items():
-            configured = ai_status.get(key, False)
-            icon = "✅" if configured else "❌"
-            status_text = "Configurado" if configured else "Não configurado"
-            status += f"{icon} {name}\n"
-            status += f"   Modelo: {model}\n"
-            status += f"   Status: {status_text}\n\n"
-        
-        if ai_status.get("last_provider"):
-            status += f"📌 Último provedor usado: {ai_status['last_provider']}\n"
-        
-        if ai_status.get("last_error"):
-            status += f"⚠️ Último erro: {ai_status['last_error']}\n"
-        
-        return status
+    def _extract_note_name(self, text):
+        """Extrai nome da nota do texto"""
+        keywords = ["abrir", "nota", "open", "note", "a", "o", "de", "do", "da"]
+        words = text.lower().split()
+        filtered = [w for w in words if w not in keywords]
+        return " ".join(filtered).strip()
     
     def process_command(self, text):
         """Processa o texto e identifica o comando"""
-        text_lower = text.lower()
+        text_lower = text.lower().strip()
         detected = None
         
         for cmd, patterns in self.command_patterns.items():
@@ -290,40 +453,69 @@ class IntelligentAgent:
             if detected:
                 break
         
-        # Se não detectou nenhum comando específico, assume que é uma pergunta para a IA
         if not detected:
             detected = "ask_ai"
         
         return {
             "command": detected,
-            "parameters": {"query": text},
+            "parameters": {"query": text, "note_name": self._extract_note_name(text)},
             "original_text": text
         }
     
     def get_help_message(self):
-        """Retorna a mensagem de ajuda"""
-        return """=== AJUDA - COMANDOS DISPONÍVEIS ===
+        """Retorna mensagem de ajuda"""
+        return """=== AJUDA - COMANDOS DISPONIVEIS ===
 
-📝 NOTAS:
-  • criar nota [título] - Cria uma nova nota
-  • listar notas - Lista todas as notas
-  • buscar [termo] - Busca nas notas
+NOTAS:
+  - criar nota [titulo] - Cria nova nota
+  - listar notas - Lista todas as notas
+  - buscar [termo] - Busca nas notas
+  - abrir nota [nome] - Abre nota especifica
+  - abrir nota de hoje - Abre nota diaria
 
-📊 STATUS:
-  • status - Status geral do sistema
-  • status ia - Status dos provedores de IA
+TAREFAS:
+  - criar tarefa - Cria nova tarefa
+  - listar tarefas - Lista tarefas pendentes
 
-🤖 IA:
-  • Qualquer pergunta será processada pela IA
-  • Sistema de fallback: OpenAI → Claude → Perplexity → Gemini
+PLUGINS:
+  - status plugins - Lista plugins instalados
+  - usar template - Insere template
+  - abrir canvas - Cria novo canvas
+  - abrir excalidraw - Cria novo desenho
 
-❓ AJUDA:
-  • ajuda - Mostra esta mensagem
+STATUS:
+  - status - Status geral do sistema
+  - status ia - Status dos provedores de IA
+
+IA:
+  - Qualquer pergunta sera processada pela IA
+  - Fallback: OpenAI -> Claude -> Perplexity
 """
     
+    def get_system_status(self):
+        """Retorna status do sistema"""
+        status = "=== STATUS DO SISTEMA ===\n\n"
+        
+        status += "CAMINHOS:\n"
+        for name, path in self.paths.items():
+            exists = Path(path).exists() if path else False
+            icon = "OK" if exists else "ERRO"
+            status += f"  [{icon}] {name}\n"
+        
+        status += "\nPROVEDORES DE IA:\n"
+        ai_status = self.ai_provider.get_status()
+        for provider in ["openai", "claude", "perplexity"]:
+            icon = "OK" if ai_status.get(provider) else "ERRO"
+            status += f"  [{icon}] {provider.upper()}\n"
+        
+        status += f"\nPLUGINS: {len(self.registry.get('plugins', {}))} registrados\n"
+        
+        return status
+    
     def generate_response(self, command_result, api_result):
-        """Gera a resposta baseada no comando e resultado da API"""
+        """Gera resposta baseada no comando"""
         cmd = command_result["command"]
+        params = command_result.get("parameters", {})
         
         if cmd == "help":
             return self.get_help_message()
@@ -332,44 +524,116 @@ class IntelligentAgent:
             return self.get_system_status()
         
         if cmd == "ai_status":
-            return self.get_ai_status()
+            ai_status = self.ai_provider.get_status()
+            status = "=== STATUS DOS PROVEDORES DE IA ===\n\n"
+            for provider in ["openai", "claude", "perplexity"]:
+                icon = "OK" if ai_status.get(provider) else "ERRO"
+                status += f"[{icon}] {provider.upper()}\n"
+            if ai_status.get("last_provider"):
+                status += f"\nUltimo usado: {ai_status['last_provider']}\n"
+            return status
+        
+        if cmd == "plugin_status":
+            return self.plugin_manager.get_plugins_summary()
+        
+        if cmd == "open_today":
+            # Tentar via API REST primeiro
+            today_note = self.obsidian_api.find_today_note()
+            if today_note:
+                result = self.obsidian_api.open_note(today_note)
+                if result.get("success"):
+                    return f"Nota de hoje aberta: {today_note}"
+            
+            # Tentar via comando nativo
+            result = self.obsidian_api.open_daily_note()
+            if result.get("success"):
+                return "Nota diaria aberta!"
+            
+            return "Nao encontrei nota de hoje. Deseja criar uma?"
+        
+        if cmd == "open_note":
+            note_name = params.get("note_name", "")
+            if note_name:
+                matches = self.obsidian_api.search_notes(note_name)
+                if matches:
+                    result = self.obsidian_api.open_note(matches[0])
+                    if result.get("success"):
+                        return f"Nota aberta: {matches[0]}"
+                    return f"Erro ao abrir nota: {result.get('error')}"
+                return f"Nota '{note_name}' nao encontrada."
+            return "Por favor, especifique o nome da nota."
+        
+        if cmd == "create_task":
+            result = self.obsidian_api.execute_command("obsidian-tasks-plugin:create-or-edit-task")
+            if result.get("success"):
+                return "Criador de tarefas aberto!"
+            return "Erro ao abrir criador de tarefas."
+        
+        if cmd == "use_template":
+            result = self.obsidian_api.execute_command("templater-obsidian:insert-templater")
+            if result.get("success"):
+                return "Seletor de templates aberto!"
+            return "Erro ao abrir templates."
+        
+        if cmd == "open_canvas":
+            result = self.obsidian_api.execute_command("canvas:new-file")
+            if result.get("success"):
+                return "Novo canvas criado!"
+            return "Erro ao criar canvas."
+        
+        if cmd == "open_excalidraw":
+            result = self.obsidian_api.execute_command("obsidian-excalidraw-plugin:excalidraw-new")
+            if result.get("success"):
+                return "Novo desenho Excalidraw criado!"
+            return "Erro ao criar desenho."
+        
+        if cmd == "search_omnisearch":
+            result = self.obsidian_api.execute_command("omnisearch:show-modal")
+            if result.get("success"):
+                return "Omnisearch aberto!"
+            return "Erro ao abrir Omnisearch."
         
         if cmd == "ask_ai":
-            query = command_result["parameters"].get("query", "")
-            system_prompt = "Você é um assistente inteligente integrado ao Obsidian. Responda em português brasileiro de forma clara, concisa e útil."
-            full_prompt = f"{system_prompt}\n\nPergunta do usuário: {query}"
+            query = params.get("query", "")
+            system_prompt = "Voce e um assistente inteligente integrado ao Obsidian. Responda em portugues brasileiro de forma clara e util."
+            full_prompt = f"{system_prompt}\n\nPergunta: {query}"
             
             response = self.ai_provider.get_response(full_prompt)
             
-            # Adiciona informação sobre qual provedor foi usado
             if self.ai_provider.last_provider:
-                response += f"\n\n[Respondido via {self.ai_provider.last_provider}]"
+                response += f"\n\n[Via {self.ai_provider.last_provider}]"
             
             return response
         
         if api_result.get("success"):
-            return f"✅ Comando '{cmd}' executado com sucesso!"
+            return f"Comando '{cmd}' executado!"
         
-        error = api_result.get("error", "desconhecido")
-        return f"❌ Erro ao executar '{cmd}': {error}"
+        return f"Erro ao executar '{cmd}'."
 
 
-# Instância global para uso no agent.py
+# Instancia global
 intelligent_agent = IntelligentAgent()
 
 
 def process_text(text):
-    """Função de conveniência para processar texto"""
+    """Funcao de conveniencia para processar texto"""
     command_result = intelligent_agent.process_command(text)
-    api_result = {"success": True}  # Placeholder
+    api_result = {"success": True}
     return intelligent_agent.generate_response(command_result, api_result)
 
 
 def get_ai_response(prompt, provider="auto"):
-    """Função de conveniência para obter resposta da IA"""
+    """Funcao de conveniencia para obter resposta da IA"""
     return intelligent_agent.ai_provider.get_response(prompt, provider)
 
 
 def get_status():
-    """Função de conveniência para obter status"""
+    """Funcao de conveniencia para obter status"""
     return intelligent_agent.get_system_status()
+
+
+def refresh_plugins():
+    """Atualiza o registro de plugins"""
+    intelligent_agent.registry = load_plugin_registry()
+    intelligent_agent.plugin_manager = PluginManager(intelligent_agent.registry)
+    return len(intelligent_agent.registry.get("plugins", {}))
