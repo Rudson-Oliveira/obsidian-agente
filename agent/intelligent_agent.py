@@ -1,11 +1,12 @@
-#!/usr/bin/env python3
 """
-Intelligent Agent v4.0 - Sistema Completo com Plugins
+Intelligent Agent v5.0 - Sistema Completo com Melhorias
 - Fallback Multi-Provedor de IA (OpenAI, Claude, Perplexity, Gemini)
 - Integracao com Registro de Plugins
 - Execucao de comandos via API REST do Obsidian
 - Abertura de notas e tarefas
 - Sincronizacao automatica de plugins
+- Sistema de logging de atividades
+- Execucao direta de comandos de plugins
 """
 import re
 import json
@@ -15,13 +16,29 @@ import urllib3
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Any
+import logging
 
 # Desabilitar warnings de SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# Configuracao de logging
+LOG_DIR = Path.home() / ".obsidian-agent" / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_DIR / f"agent_{datetime.now().strftime('%Y-%m-%d')}.log", encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
 # Arquivos de configuracao
 CONTEXT_FILE = Path.home() / "COMET" / "SYSTEM_CONTEXT.json"
 REGISTRY_FILE = Path.home() / "COMET" / "plugin_registry.json"
+ACTIVITY_LOG_FILE = LOG_DIR / f"activity_{datetime.now().strftime('%Y-%m-%d')}.json"
 
 try:
     from obsidian_knowledge import get_knowledge, search_knowledge
@@ -46,6 +63,34 @@ def load_plugin_registry():
     return {"plugins": {}}
 
 
+def log_activity(action: str, details: Dict[str, Any]):
+    """Registra atividade em arquivo JSON"""
+    activity = {
+        "timestamp": datetime.now().isoformat(),
+        "action": action,
+        "details": details
+    }
+    
+    activities = []
+    if ACTIVITY_LOG_FILE.exists():
+        try:
+            with open(ACTIVITY_LOG_FILE, "r", encoding="utf-8") as f:
+                activities = json.load(f)
+        except:
+            activities = []
+    
+    activities.append(activity)
+    
+    # Manter apenas ultimas 1000 atividades
+    if len(activities) > 1000:
+        activities = activities[-1000:]
+    
+    with open(ACTIVITY_LOG_FILE, "w", encoding="utf-8") as f:
+        json.dump(activities, f, indent=2, ensure_ascii=False)
+    
+    logger.info(f"[{action}] {json.dumps(details, ensure_ascii=False)}")
+
+
 class ObsidianAPI:
     """Classe para interagir com a API REST do Obsidian"""
     
@@ -55,6 +100,7 @@ class ObsidianAPI:
         self.base_url = services.get("url", "https://localhost:27124")
         self.api_key = services.get("api_key", "")
         self.vault_path = context.get("paths", {}).get("vault", "")
+        logger.info(f"ObsidianAPI inicializado: {self.base_url}")
     
     def _request(self, method, endpoint, **kwargs):
         """Faz uma requisicao para a API do Obsidian"""
@@ -67,15 +113,23 @@ class ObsidianAPI:
             response = requests.request(
                 method, url, headers=headers, verify=False, timeout=10, **kwargs
             )
+            log_activity("API_REQUEST", {
+                "method": method,
+                "endpoint": endpoint,
+                "status_code": response.status_code
+            })
             return response
         except Exception as e:
+            log_activity("API_ERROR", {"endpoint": endpoint, "error": str(e)})
             return None
     
     def execute_command(self, command_id):
         """Executa um comando do Obsidian via API"""
         response = self._request("POST", f"/commands/{command_id}")
         if response and response.status_code in [200, 204]:
+            log_activity("COMMAND_EXECUTED", {"command": command_id, "success": True})
             return {"success": True, "message": f"Comando '{command_id}' executado!"}
+        log_activity("COMMAND_FAILED", {"command": command_id, "success": False})
         return {"success": False, "error": f"Erro ao executar comando"}
     
     def open_note(self, note_path):
@@ -85,8 +139,28 @@ class ObsidianAPI:
         
         response = self._request("POST", f"/open/{note_path}")
         if response and response.status_code in [200, 204]:
+            log_activity("NOTE_OPENED", {"note": note_path})
             return {"success": True, "message": f"Nota '{note_path}' aberta!"}
         return {"success": False, "error": "Erro ao abrir nota"}
+    
+    def create_note(self, path: str, content: str):
+        """Cria uma nova nota"""
+        if not path.endswith('.md'):
+            path = f"{path}.md"
+        
+        response = self._request(
+            "PUT", 
+            f"/vault/{path}",
+            data=content.encode('utf-8'),
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "text/markdown"
+            }
+        )
+        if response and response.status_code in [200, 204]:
+            log_activity("NOTE_CREATED", {"path": path})
+            return {"success": True, "message": f"Nota '{path}' criada!"}
+        return {"success": False, "error": "Erro ao criar nota"}
     
     def list_notes(self, folder=""):
         """Lista notas no vault"""
@@ -167,6 +241,20 @@ class ObsidianAPI:
     def open_daily_note(self):
         """Abre a nota diaria (via comando nativo)"""
         return self.execute_command("daily-notes:open")
+    
+    def get_vault_stats(self):
+        """Retorna estatisticas do vault"""
+        all_notes = self._get_all_notes()
+        folders = set()
+        for note in all_notes:
+            if "/" in note:
+                folders.add(note.rsplit("/", 1)[0])
+        
+        return {
+            "total_notes": len(all_notes),
+            "total_folders": len(folders),
+            "folders": list(folders)[:10]
+        }
 
 
 class PluginManager:
@@ -176,6 +264,73 @@ class PluginManager:
         self.plugins = registry_data.get("plugins", {})
         self.triggers_map = self._build_triggers_map()
         self.commands_map = self._build_commands_map()
+        
+        # Mapeamento de comandos diretos
+        self.direct_commands = {
+            # Daily Notes
+            "nota de hoje": "daily-notes:open",
+            "nota diaria": "daily-notes:open",
+            "daily note": "daily-notes:open",
+            "abrir hoje": "daily-notes:open",
+            
+            # Templater
+            "template": "templater-obsidian:insert-templater",
+            "inserir template": "templater-obsidian:insert-templater",
+            "novo template": "templater-obsidian:create-new-note-from-template",
+            
+            # Omnisearch
+            "buscar": "omnisearch:show-modal",
+            "pesquisar": "omnisearch:show-modal",
+            "search": "omnisearch:show-modal",
+            "omnisearch": "omnisearch:show-modal",
+            
+            # Tasks
+            "tarefa": "obsidian-tasks-plugin:create-or-edit-task",
+            "criar tarefa": "obsidian-tasks-plugin:create-or-edit-task",
+            "task": "obsidian-tasks-plugin:create-or-edit-task",
+            "nova tarefa": "obsidian-tasks-plugin:create-or-edit-task",
+            
+            # Excalidraw
+            "excalidraw": "obsidian-excalidraw-plugin:excalidraw-autocreate",
+            "desenho": "obsidian-excalidraw-plugin:excalidraw-autocreate",
+            "novo desenho": "obsidian-excalidraw-plugin:excalidraw-autocreate",
+            "diagrama": "obsidian-excalidraw-plugin:excalidraw-autocreate",
+            
+            # Canvas
+            "canvas": "canvas:new-file",
+            "quadro": "canvas:new-file",
+            "novo canvas": "canvas:new-file",
+            
+            # Dataview
+            "dataview": "dataview:dataview-force-refresh-views",
+            "atualizar dataview": "dataview:dataview-force-refresh-views",
+            
+            # Navigation
+            "backlinks": "app:toggle-backlinks",
+            "links": "app:toggle-backlinks",
+            "comandos": "command-palette:open",
+            "paleta": "command-palette:open",
+            "command palette": "command-palette:open",
+            
+            # Graph
+            "grafo": "graph:open",
+            "graph": "graph:open",
+            "grafo local": "graph:open-local",
+            
+            # Quick Switcher
+            "trocar nota": "switcher:open",
+            "switcher": "switcher:open",
+            
+            # AI Commander
+            "ai commander": "ai-commander:prompt",
+            "ia commander": "ai-commander:prompt",
+            
+            # Text Generator
+            "text generator": "obsidian-textgenerator-plugin:generate-text",
+            "gerar texto": "obsidian-textgenerator-plugin:generate-text"
+        }
+        
+        logger.info(f"PluginManager inicializado: {len(self.plugins)} plugins, {len(self.direct_commands)} comandos diretos")
     
     def _build_triggers_map(self):
         """Constroi mapa de triggers para plugins"""
@@ -205,30 +360,8 @@ class PluginManager:
         """Obtem comando para uma acao"""
         action_lower = action.lower()
         
-        # Mapeamento de acoes para comandos
-        action_commands = {
-            "nota de hoje": "daily-notes:open",
-            "nota diaria": "daily-notes:open",
-            "daily note": "daily-notes:open",
-            "abrir hoje": "daily-notes:open",
-            "template": "templater-obsidian:insert-templater",
-            "inserir template": "templater-obsidian:insert-templater",
-            "buscar": "omnisearch:show-modal",
-            "pesquisar": "omnisearch:show-modal",
-            "search": "omnisearch:show-modal",
-            "tarefa": "obsidian-tasks-plugin:create-or-edit-task",
-            "criar tarefa": "obsidian-tasks-plugin:create-or-edit-task",
-            "task": "obsidian-tasks-plugin:create-or-edit-task",
-            "excalidraw": "obsidian-excalidraw-plugin:excalidraw-new",
-            "desenho": "obsidian-excalidraw-plugin:excalidraw-new",
-            "canvas": "canvas:new-file",
-            "quadro": "canvas:new-file",
-            "backlinks": "app:toggle-backlinks",
-            "comandos": "command-palette:open",
-            "paleta": "command-palette:open"
-        }
-        
-        for key, cmd in action_commands.items():
+        # Buscar nos comandos diretos
+        for key, cmd in self.direct_commands.items():
             if key in action_lower:
                 return cmd
         
@@ -276,6 +409,10 @@ class PluginManager:
             summary += f"{name}: {', '.join(plugins)}\n"
         
         return summary
+    
+    def get_available_commands(self):
+        """Retorna lista de comandos disponiveis"""
+        return list(self.direct_commands.keys())
 
 
 class AIProvider:
@@ -286,6 +423,8 @@ class AIProvider:
         self.apis = context.get("apis", {})
         self.last_provider = None
         self.last_error = None
+        self.request_count = 0
+        logger.info("AIProvider inicializado")
     
     def call_openai(self, prompt):
         """Chama a API da OpenAI"""
@@ -308,6 +447,8 @@ class AIProvider:
             if r.status_code == 200:
                 content = r.json().get("choices", [{}])[0].get("message", {}).get("content", "")
                 self.last_provider = "OpenAI"
+                self.request_count += 1
+                log_activity("AI_REQUEST", {"provider": "openai", "success": True})
                 return content, None
             return None, f"OpenAI erro {r.status_code}"
         except Exception as e:
@@ -337,6 +478,8 @@ class AIProvider:
             if r.status_code == 200:
                 content = r.json().get("content", [{}])[0].get("text", "")
                 self.last_provider = "Claude"
+                self.request_count += 1
+                log_activity("AI_REQUEST", {"provider": "claude", "success": True})
                 return content, None
             return None, f"Claude erro {r.status_code}"
         except Exception as e:
@@ -365,6 +508,8 @@ class AIProvider:
             if r.status_code == 200:
                 content = r.json().get("choices", [{}])[0].get("message", {}).get("content", "")
                 self.last_provider = "Perplexity"
+                self.request_count += 1
+                log_activity("AI_REQUEST", {"provider": "perplexity", "success": True})
                 return content, None
             return None, f"Perplexity erro {r.status_code}"
         except Exception as e:
@@ -388,6 +533,7 @@ class AIProvider:
                 errors.append(f"{name}: {error}")
         
         self.last_error = "; ".join(errors)
+        log_activity("AI_ERROR", {"errors": errors})
         return f"Erro: Nenhum provedor de IA disponivel."
     
     def get_status(self):
@@ -396,14 +542,16 @@ class AIProvider:
             "openai": bool(self.apis.get("openai", {}).get("key")),
             "claude": bool(self.apis.get("claude", {}).get("key")),
             "perplexity": bool(self.apis.get("perplexity", {}).get("key")),
-            "last_provider": self.last_provider
+            "last_provider": self.last_provider,
+            "request_count": self.request_count
         }
 
 
 class IntelligentAgent:
-    """Agente inteligente principal"""
+    """Agente inteligente principal v5.0"""
     
     def __init__(self):
+        logger.info("Inicializando IntelligentAgent v5.0...")
         self.context = load_system_context()
         self.registry = load_plugin_registry()
         self.ai_provider = AIProvider(self.context)
@@ -411,6 +559,9 @@ class IntelligentAgent:
         self.plugin_manager = PluginManager(self.registry)
         self.paths = self.context.get("paths", {})
         self.command_patterns = self._build_command_patterns()
+        self.session_start = datetime.now()
+        self.commands_processed = 0
+        log_activity("AGENT_STARTED", {"version": "5.0"})
     
     def _build_command_patterns(self):
         """Constroi padroes de reconhecimento"""
@@ -427,6 +578,9 @@ class IntelligentAgent:
             "open_excalidraw": [r"abr.*excalidraw", r"novo.*desenho", r"criar.*diagrama"],
             "search_omnisearch": [r"omnisearch", r"busca.*avancada"],
             "plugin_status": [r"status.*plugin", r"plugins.*instalados", r"listar.*plugins"],
+            "plugin_command": [r"executar.*plugin", r"rodar.*plugin", r"plugin:"],
+            "vault_stats": [r"estatisticas", r"stats", r"info.*vault"],
+            "activity_log": [r"log.*atividade", r"historico", r"ultimas.*acoes"],
             "help": [r"^ajuda$", r"^help$", r"^comandos$"],
             "status": [r"^status$", r"^estado$"],
             "ai_status": [r"status.*ia", r"status.*ai"],
@@ -445,20 +599,32 @@ class IntelligentAgent:
         text_lower = text.lower().strip()
         detected = None
         
-        for cmd, patterns in self.command_patterns.items():
-            for p in patterns:
-                if re.search(p, text_lower):
-                    detected = cmd
+        # Verificar se e um comando de plugin direto
+        plugin_cmd = self.plugin_manager.get_command_for_action(text_lower)
+        if plugin_cmd:
+            detected = "plugin_command"
+        else:
+            for cmd, patterns in self.command_patterns.items():
+                for p in patterns:
+                    if re.search(p, text_lower):
+                        detected = cmd
+                        break
+                if detected:
                     break
-            if detected:
-                break
         
         if not detected:
             detected = "ask_ai"
         
+        self.commands_processed += 1
+        log_activity("COMMAND_DETECTED", {"command": detected, "text": text[:50]})
+        
         return {
             "command": detected,
-            "parameters": {"query": text, "note_name": self._extract_note_name(text)},
+            "parameters": {
+                "query": text, 
+                "note_name": self._extract_note_name(text),
+                "plugin_command": plugin_cmd
+            },
             "original_text": text
         }
     
@@ -482,10 +648,15 @@ PLUGINS:
   - usar template - Insere template
   - abrir canvas - Cria novo canvas
   - abrir excalidraw - Cria novo desenho
+  - omnisearch - Abre busca avancada
+  - dataview - Atualiza queries
+  - grafo - Abre visualizacao de grafo
 
 STATUS:
   - status - Status geral do sistema
   - status ia - Status dos provedores de IA
+  - estatisticas - Info do vault
+  - historico - Log de atividades
 
 IA:
   - Qualquer pergunta sera processada pela IA
@@ -494,7 +665,13 @@ IA:
     
     def get_system_status(self):
         """Retorna status do sistema"""
-        status = "=== STATUS DO SISTEMA ===\n\n"
+        uptime = datetime.now() - self.session_start
+        
+        status = "=== STATUS DO SISTEMA v5.0 ===\n\n"
+        
+        status += f"SESSAO:\n"
+        status += f"  Uptime: {uptime}\n"
+        status += f"  Comandos processados: {self.commands_processed}\n\n"
         
         status += "CAMINHOS:\n"
         for name, path in self.paths.items():
@@ -507,10 +684,44 @@ IA:
         for provider in ["openai", "claude", "perplexity"]:
             icon = "OK" if ai_status.get(provider) else "ERRO"
             status += f"  [{icon}] {provider.upper()}\n"
+        status += f"  Requisicoes: {ai_status.get('request_count', 0)}\n"
         
         status += f"\nPLUGINS: {len(self.registry.get('plugins', {}))} registrados\n"
+        status += f"COMANDOS DIRETOS: {len(self.plugin_manager.direct_commands)} disponiveis\n"
         
         return status
+    
+    def get_vault_stats(self):
+        """Retorna estatisticas do vault"""
+        stats = self.obsidian_api.get_vault_stats()
+        
+        result = "=== ESTATISTICAS DO VAULT ===\n\n"
+        result += f"Total de notas: {stats.get('total_notes', 0)}\n"
+        result += f"Total de pastas: {stats.get('total_folders', 0)}\n"
+        result += f"\nPastas principais:\n"
+        for folder in stats.get('folders', []):
+            result += f"  - {folder}\n"
+        
+        return result
+    
+    def get_activity_log(self, limit=10):
+        """Retorna log de atividades recentes"""
+        if not ACTIVITY_LOG_FILE.exists():
+            return "Nenhuma atividade registrada."
+        
+        with open(ACTIVITY_LOG_FILE, "r", encoding="utf-8") as f:
+            activities = json.load(f)
+        
+        recent = activities[-limit:]
+        recent.reverse()
+        
+        result = f"=== ULTIMAS {len(recent)} ATIVIDADES ===\n\n"
+        for act in recent:
+            ts = act.get("timestamp", "")[:19]
+            action = act.get("action", "")
+            result += f"[{ts}] {action}\n"
+        
+        return result
     
     def generate_response(self, command_result, api_result):
         """Gera resposta baseada no comando"""
@@ -523,6 +734,12 @@ IA:
         if cmd == "status":
             return self.get_system_status()
         
+        if cmd == "vault_stats":
+            return self.get_vault_stats()
+        
+        if cmd == "activity_log":
+            return self.get_activity_log()
+        
         if cmd == "ai_status":
             ai_status = self.ai_provider.get_status()
             status = "=== STATUS DOS PROVEDORES DE IA ===\n\n"
@@ -531,10 +748,20 @@ IA:
                 status += f"[{icon}] {provider.upper()}\n"
             if ai_status.get("last_provider"):
                 status += f"\nUltimo usado: {ai_status['last_provider']}\n"
+            status += f"Total de requisicoes: {ai_status.get('request_count', 0)}\n"
             return status
         
         if cmd == "plugin_status":
             return self.plugin_manager.get_plugins_summary()
+        
+        if cmd == "plugin_command":
+            plugin_cmd = params.get("plugin_command")
+            if plugin_cmd:
+                result = self.obsidian_api.execute_command(plugin_cmd)
+                if result.get("success"):
+                    return f"Comando executado: {plugin_cmd}"
+                return f"Erro ao executar comando: {plugin_cmd}"
+            return "Comando de plugin nao identificado."
         
         if cmd == "open_today":
             # Tentar via API REST primeiro
@@ -563,6 +790,17 @@ IA:
                 return f"Nota '{note_name}' nao encontrada."
             return "Por favor, especifique o nome da nota."
         
+        if cmd == "list_notes":
+            notes = self.obsidian_api._get_all_notes()
+            if notes:
+                result = f"=== NOTAS ({len(notes)} total) ===\n\n"
+                for note in notes[:20]:
+                    result += f"  - {note}\n"
+                if len(notes) > 20:
+                    result += f"\n... e mais {len(notes) - 20} notas"
+                return result
+            return "Nenhuma nota encontrada."
+        
         if cmd == "create_task":
             result = self.obsidian_api.execute_command("obsidian-tasks-plugin:create-or-edit-task")
             if result.get("success"):
@@ -582,7 +820,7 @@ IA:
             return "Erro ao criar canvas."
         
         if cmd == "open_excalidraw":
-            result = self.obsidian_api.execute_command("obsidian-excalidraw-plugin:excalidraw-new")
+            result = self.obsidian_api.execute_command("obsidian-excalidraw-plugin:excalidraw-autocreate")
             if result.get("success"):
                 return "Novo desenho Excalidraw criado!"
             return "Erro ao criar desenho."
@@ -595,7 +833,7 @@ IA:
         
         if cmd == "ask_ai":
             query = params.get("query", "")
-            system_prompt = "Voce e um assistente inteligente integrado ao Obsidian. Responda em portugues brasileiro de forma clara e util."
+            system_prompt = "Voce e um assistente inteligente integrado ao Obsidian. Responda em portugues brasileiro de forma clara e util. Seja conciso mas informativo."
             full_prompt = f"{system_prompt}\n\nPergunta: {query}"
             
             response = self.ai_provider.get_response(full_prompt)
@@ -637,3 +875,8 @@ def refresh_plugins():
     intelligent_agent.registry = load_plugin_registry()
     intelligent_agent.plugin_manager = PluginManager(intelligent_agent.registry)
     return len(intelligent_agent.registry.get("plugins", {}))
+
+
+def get_activity_log(limit=10):
+    """Retorna log de atividades"""
+    return intelligent_agent.get_activity_log(limit)
