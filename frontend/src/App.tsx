@@ -14,7 +14,7 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: 'Olá! Sou o Obsidian Agente Inteligente v2.0. 🟠\n\nEstou conectado ao seu vault e pronto para ajudar. Posso criar notas, buscar informações, explicar conceitos ou automatizar tarefas.\n\nComo posso ser útil hoje?',
+      text: 'Olá! Sou o Obsidian Agente Inteligente v5.0. 🟠\n\nEstou conectado ao seu vault e pronto para ajudar. Posso criar notas, buscar informações, explicar conceitos ou automatizar tarefas.\n\nComo posso ser útil hoje?',
       sender: 'assistant',
       timestamp: new Date(),
       type: 'text'
@@ -147,7 +147,7 @@ function App() {
             <span className="logo-icon">OA</span>
             <div className="logo-text">
               <span className="logo-title">Obsidian</span>
-              <span className="logo-subtitle">AGENTE v2.0</span>
+              <span className="logo-subtitle">AGENTE v5.0</span>
             </div>
           </div>
         </div>
@@ -208,7 +208,7 @@ function App() {
             <span className={'status-dot ' + (isConnected ? 'online' : 'offline')}></span>
             <span>Sistema Online</span>
           </div>
-          <span className="header-version">v2.0.0</span>
+          <span className="header-version">v5.0.0</span>
         </header>
 
         <div className="chat-container">
