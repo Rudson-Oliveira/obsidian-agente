@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import './App.css';
 
 interface Message {
@@ -6,38 +6,58 @@ interface Message {
   text: string;
   sender: 'user' | 'assistant';
   timestamp: Date;
-  type?: 'text' | 'notes' | 'error';
-  data?: any[];
+  type?: string;
+  data?: any;
 }
 
 function App() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: 'Olá! Sou o Obsidian Agente Inteligente v2.0.\n\nEstou conectado ao seu vault e pronto para ajudar. Posso criar notas, buscar informações, explicar conceitos ou automatizar tarefas.\n\nComo posso ser útil hoje?',
+      text: 'Olá! Sou o Obsidian Agente Inteligente v2.0. 🟠\n\nEstou conectado ao seu vault e pronto para ajudar. Posso criar notas, buscar informações, explicar conceitos ou automatizar tarefas.\n\nComo posso ser útil hoje?',
       sender: 'assistant',
       timestamp: new Date(),
       type: 'text'
     }
   ]);
   const [inputText, setInputText] = useState('');
-  const [isConnected, setIsConnected] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
   const [activeNav, setActiveNav] = useState('chat');
-  const [apiKey] = useState(localStorage.getItem('obsidian_api_key') || '');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesAreaRef = useRef<HTMLDivElement>(null);
 
-  const quickActions = [
-    'Criar nota sobre IA',
-    'Listar notas recentes',
-    'Buscar projeto',
-    'Status do sistema'
-  ];
+  const apiKey = 'heDuf3s4Y_EXwISRm2q2O1UPgi0zWbskf4_suT3cdus';
+
+  const quickActions = ['📝 Criar nota', '🔍 Buscar', '📊 Status', '❓ Ajuda'];
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    checkConnection();
+    const interval = setInterval(checkConnection, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const scrollToBottom = () => {
+    if (messagesAreaRef.current) {
+      messagesAreaRef.current.scrollTop = messagesAreaRef.current.scrollHeight;
+    }
+  };
+
+  const checkConnection = async () => {
+    try {
+      const response = await fetch('http://localhost:5001/health', {
+        method: 'GET',
+        headers: { 'Authorization': 'Bearer ' + apiKey }
+      });
+      setIsConnected(response.ok);
+    } catch {
+      setIsConnected(false);
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!inputText.trim() || isLoading) return;
@@ -51,17 +71,19 @@ function App() {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const messageText = inputText;
     setInputText('');
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5001/chat', {
+      // CORREÇÃO: Usar o endpoint correto /intelligent/process com parâmetro "text"
+      const response = await fetch('http://localhost:5001/intelligent/process', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ' + apiKey
         },
-        body: JSON.stringify({ message: inputText })
+        body: JSON.stringify({ text: messageText })  // CORREÇÃO: usar "text" em vez de "message"
       });
 
       const data = await response.json();
@@ -77,9 +99,10 @@ function App() {
 
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
+      console.error('Erro ao enviar mensagem:', error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: 'Erro ao conectar com o agente. Verifique se o servidor está rodando.',
+        text: 'Erro ao processar sua mensagem. Verifique se o agente está rodando.',
         sender: 'assistant',
         timestamp: new Date(),
         type: 'error'
@@ -91,7 +114,24 @@ function App() {
   };
 
   const handleQuickAction = (action: string) => {
-    setInputText(action);
+    let command = '';
+    switch (action) {
+      case '📝 Criar nota':
+        command = 'criar nota';
+        break;
+      case '🔍 Buscar':
+        command = 'buscar';
+        break;
+      case '📊 Status':
+        command = 'status';
+        break;
+      case '❓ Ajuda':
+        command = 'ajuda';
+        break;
+      default:
+        command = action;
+    }
+    setInputText(command);
   };
 
   const formatTime = (date: Date) => {
@@ -99,23 +139,15 @@ function App() {
   };
 
   return (
-    <div className="app">
+    <div className="app-container">
       {/* Sidebar */}
-      <aside className={'sidebar' + (sidebarCollapsed ? ' collapsed' : '')}>
-        <button 
-          className="sidebar-toggle"
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
-        >
-          {sidebarCollapsed ? '→' : '←'}
-        </button>
-
+      <aside className="sidebar">
         <div className="sidebar-header">
-          <div className="logo-container">
-            <div className="logo-icon">OA</div>
+          <div className="logo">
+            <span className="logo-icon">OA</span>
             <div className="logo-text">
               <span className="logo-title">Obsidian</span>
-              <span className="logo-subtitle">AGENTE V2.0</span>
+              <span className="logo-subtitle">AGENTE v2.0</span>
             </div>
           </div>
         </div>
@@ -163,7 +195,7 @@ function App() {
             </span>
           </div>
           <button className="disconnect-btn">
-            <span>↪️</span>
+            <span>🔌</span>
             Desconectar
           </button>
         </div>
@@ -180,7 +212,8 @@ function App() {
         </header>
 
         <div className="chat-container">
-          <div className="messages-area">
+          {/* CORREÇÃO: Adicionada ref e overflow-y para barra de rolagem */}
+          <div className="messages-area" ref={messagesAreaRef}>
             {messages.map((message) => (
               <div key={message.id} className={'message ' + message.sender}>
                 <div className="message-avatar">
@@ -244,7 +277,7 @@ function App() {
             </div>
 
             <div className="input-footer">
-              <span>⌘ Comandos disponíveis</span>
+              <span>📋 Comandos disponíveis</span>
               <span className="made-with">
                 Made with <a href="https://manus.im" target="_blank" rel="noopener noreferrer">Manus</a>
               </span>
@@ -257,3 +290,4 @@ function App() {
 }
 
 export default App;
+

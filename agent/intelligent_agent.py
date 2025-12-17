@@ -1,4 +1,4 @@
-"""
+﻿"""
 Intelligent Agent v5.0 - Sistema Completo com Melhorias
 - Fallback Multi-Provedor de IA (OpenAI, Claude, Perplexity, Gemini)
 - Integracao com Registro de Plugins
@@ -362,7 +362,7 @@ class PluginManager:
         
         # Buscar nos comandos diretos
         for key, cmd in self.direct_commands.items():
-            if key in action_lower:
+            if action_lower.startswith(key) or action_lower == key:
                 return cmd
         
         # Buscar nos plugins
@@ -600,7 +600,10 @@ class IntelligentAgent:
         detected = None
         
         # Verificar se e um comando de plugin direto
-        plugin_cmd = self.plugin_manager.get_command_for_action(text_lower)
+        # Verificar se e uma pergunta antes de buscar comando de plugin
+        question_words = ["qual", "quem", "quando", "onde", "como", "por que", "o que", "me diga", "?"]
+        is_question = any(q in text_lower for q in question_words)
+        plugin_cmd = None if is_question else self.plugin_manager.get_command_for_action(text_lower)
         if plugin_cmd:
             detected = "plugin_command"
         else:
@@ -880,3 +883,5 @@ def refresh_plugins():
 def get_activity_log(limit=10):
     """Retorna log de atividades"""
     return intelligent_agent.get_activity_log(limit)
+
+
