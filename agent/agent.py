@@ -567,9 +567,11 @@ def get_config():
     config = load_config()
     return jsonify({
         'port': config.get('port'),
-        'version': '2.0',
+        'version': '5.0',
         'obsidian_path': config.get('obsidian_path'),
-        'features': ['intelligent_processing', 'nlp_commands', 'obsidian_knowledge']
+        'api_key': config.get('api_key'),
+        'vault_path': config.get('vault_path'),
+        'features': ['intelligent_processing', 'nlp_commands', 'obsidian_knowledge', 'auto_config']
     })
 
 # ==================== MAIN ====================
@@ -601,4 +603,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
