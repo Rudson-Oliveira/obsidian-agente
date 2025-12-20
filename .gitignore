@@ -44,3 +44,5 @@ coverage/
 *.key
 *.pem
 secrets.json
+
+agent/ai_config.json
