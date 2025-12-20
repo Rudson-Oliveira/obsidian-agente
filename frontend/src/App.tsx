@@ -1,4 +1,5 @@
-﻿import { useState, useEffect, useRef } from 'react';
+﻿// Atualizado: 2025-12-17T03:35:37.222786
+import { useState, useEffect, useRef } from 'react';
 import './App.css';
 
 interface Message {
@@ -11,6 +12,8 @@ interface Message {
 }
 
 function App() {
+  // FORCE REBUILD - v5.0 - 17/12/2025 05:45
+  console.log('Obsidian Agente v5.0 - Build atualizado');
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',

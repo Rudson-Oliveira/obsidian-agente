@@ -105,7 +105,7 @@ def health():
     """Verifica se o agente estÃ¡ online"""
     return jsonify({
         'status': 'online',
-        'version': '1.1',
+        'version': '5.0.0',
         'timestamp': datetime.now().isoformat(),
     })
 
@@ -132,6 +132,28 @@ def obsidian_open():
         })
     except Exception as e:
         logger.error(f'Erro ao abrir Obsidian: {str(e)}')
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/obsidian/close', methods=['POST'])
+@require_auth
+def obsidian_close():
+    """Fecha a aplicacao Obsidian"""
+    try:
+        # Tenta fechar o processo do Obsidian no Windows
+        result = subprocess.run(['taskkill', '/IM', 'Obsidian.exe', '/F'], capture_output=True, text=True)
+        
+        logger.info('Obsidian fechado com sucesso')
+        
+        return jsonify({
+            'success': True,
+            'message': 'Obsidian fechado com sucesso'
+        })
+    except Exception as e:
+        logger.error(f'Erro ao fechar Obsidian: {str(e)}')
         return jsonify({
             'success': False,
             'error': str(e)
@@ -542,6 +564,24 @@ def intelligent_process():
             else:
                 api_result = {'success': False, 'error': 'Caminho invÃ¡lido'}
         
+
+        elif command == "plugin_command":
+            plugin_cmd = params.get("plugin_command")
+            if plugin_cmd:
+                try:
+                    import requests
+                    obsidian_api_key = "475ba2e794a2f8312e05dbe801debaf55f232ee98aafd68c7b0b44de19d628fd"
+                    headers = {"Authorization": f"Bearer {obsidian_api_key}"}
+                    response = requests.post(f"http://127.0.0.1:27123/commands/{plugin_cmd}", headers=headers, timeout=10)
+                    if response.status_code == 200:
+                        api_result = {"success": True, "message": f"Comando {plugin_cmd} executado"}
+                    else:
+                        api_result = {"success": False, "error": f"Erro: {response.text}"}
+                except Exception as e:
+                    api_result = {"success": False, "error": f"Erro: {str(e)}"}
+            else:
+                api_result = {"success": False, "error": "Comando nao especificado"}
+        
         # Gerar resposta inteligente
         response_text = intelligent_agent.generate_response(command_result, api_result)
         
@@ -574,6 +614,103 @@ def get_config():
         'features': ['intelligent_processing', 'nlp_commands', 'obsidian_knowledge', 'auto_config']
     })
 
+
+
+# ==================== AI INTEGRATION ENDPOINTS ====================
+
+from ai_integration import ai_integration, configure_ai, set_ai_provider, get_ai_status, list_ai_providers, chat_with_ai, set_fallback_providers
+
+@app.route('/ai/status', methods=['GET'])
+def ai_status():
+    """Retorna status de todos os provedores de IA"""
+    return jsonify(get_ai_status())
+
+@app.route('/ai/providers', methods=['GET'])
+def ai_providers():
+    """Lista provedores de IA disponíveis"""
+    return jsonify(list_ai_providers())
+
+@app.route('/ai/configure', methods=['POST'])
+@require_auth
+def ai_configure():
+    """Configura um provedor de IA"""
+    data = request.get_json()
+    provider = data.get('provider')
+    api_key = data.get('api_key')
+    base_url = data.get('base_url')
+    model = data.get('model')
+    
+    if not provider or not api_key:
+        return jsonify({'success': False, 'error': 'provider e api_key são obrigatórios'}), 400
+    
+    result = configure_ai(provider, api_key, base_url=base_url, model=model)
+    return jsonify(result)
+
+@app.route('/ai/set-provider', methods=['POST'])
+@require_auth
+def ai_set_provider():
+    """Define o provedor de IA ativo"""
+    data = request.get_json()
+    provider = data.get('provider')
+    
+    if not provider:
+        return jsonify({'success': False, 'error': 'provider é obrigatório'}), 400
+    
+    result = set_ai_provider(provider)
+    return jsonify(result)
+
+@app.route('/ai/set-fallback', methods=['POST'])
+@require_auth
+def ai_set_fallback():
+    """Define provedores de fallback"""
+    data = request.get_json()
+    providers = data.get('providers', [])
+    
+    result = set_fallback_providers(providers)
+    return jsonify(result)
+
+@app.route('/ai/chat', methods=['POST'])
+@require_auth
+def ai_chat():
+    """Envia mensagem para a IA"""
+    data = request.get_json()
+    message = data.get('message')
+    context = data.get('context')
+    provider = data.get('provider')  # Opcional: força um provedor específico
+    
+    if not message:
+        return jsonify({'success': False, 'error': 'message é obrigatório'}), 400
+    
+    result = chat_with_ai(message, context, provider=provider)
+    return jsonify(result)
+
+@app.route('/ai/test', methods=['POST'])
+@require_auth
+def ai_test():
+    """Testa a conexão com um provedor de IA"""
+    data = request.get_json()
+    provider = data.get('provider')
+    
+    if not provider:
+        return jsonify({'success': False, 'error': 'provider é obrigatório'}), 400
+    
+    # Envia uma mensagem de teste
+    result = chat_with_ai("Olá! Responda apenas com 'OK' se você está funcionando.", provider=provider)
+    
+    if result.get('success'):
+        return jsonify({
+            'success': True,
+            'message': f'Teste com {provider} realizado com sucesso!',
+            'response': result.get('response'),
+            'model': result.get('model')
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'error': result.get('error')
+        })
+
+
 # ==================== MAIN ====================
 
 def main():
@@ -599,9 +736,11 @@ def main():
     except KeyboardInterrupt:
         logger.info('Agente parado pelo usuÃ¡rio')
         sys.exit(0)
-
+
+
 
 if __name__ == '__main__':
     main()
+
 
 

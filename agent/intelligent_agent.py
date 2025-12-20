@@ -240,7 +240,7 @@ class ObsidianAPI:
     
     def open_daily_note(self):
         """Abre a nota diaria (via comando nativo)"""
-        return self.execute_command("daily-notes:open")
+        return self.execute_command("daily-notes")
     
     def get_vault_stats(self):
         """Retorna estatisticas do vault"""
@@ -268,10 +268,10 @@ class PluginManager:
         # Mapeamento de comandos diretos
         self.direct_commands = {
             # Daily Notes
-            "nota de hoje": "daily-notes:open",
-            "nota diaria": "daily-notes:open",
-            "daily note": "daily-notes:open",
-            "abrir hoje": "daily-notes:open",
+            "nota de hoje": "daily-notes",
+            "nota diaria": "daily-notes",
+            "daily note": "daily-notes",
+            "abrir hoje": "daily-notes",
             
             # Templater
             "template": "templater-obsidian:insert-templater",
@@ -285,10 +285,10 @@ class PluginManager:
             "omnisearch": "omnisearch:show-modal",
             
             # Tasks
-            "tarefa": "obsidian-tasks-plugin:create-or-edit-task",
-            "criar tarefa": "obsidian-tasks-plugin:create-or-edit-task",
-            "task": "obsidian-tasks-plugin:create-or-edit-task",
-            "nova tarefa": "obsidian-tasks-plugin:create-or-edit-task",
+            "tarefa": "editor:toggle-checklist-status",
+            "criar tarefa": "editor:toggle-checklist-status",
+            "task": "editor:toggle-checklist-status",
+            "nova tarefa": "editor:toggle-checklist-status",
             
             # Excalidraw
             "excalidraw": "obsidian-excalidraw-plugin:excalidraw-autocreate",
@@ -357,21 +357,22 @@ class PluginManager:
         return None
     
     def get_command_for_action(self, action):
-        """Obtem comando para uma acao"""
         action_lower = action.lower()
-        
-        # Buscar nos comandos diretos
-        for key, cmd in self.direct_commands.items():
-            if action_lower.startswith(key) or action_lower == key:
+        daily_keywords = ['nota de hoje', 'nota diaria', 'daily note', 'abrir hoje', 'abra a nota', 'abra hoje', 'nota do dia']
+        for kw in daily_keywords:
+            if kw in action_lower:
+                return 'daily-notes'
+        if action_lower in self.direct_commands:
+            return self.direct_commands[action_lower]
+        sorted_commands = sorted(self.direct_commands.items(), key=lambda x: len(x[0]), reverse=True)
+        for key, cmd in sorted_commands:
+            if key in action_lower:
                 return cmd
-        
-        # Buscar nos plugins
         plugin = self.find_plugin_by_text(action)
         if plugin:
-            commands = plugin.get("commands", [])
+            commands = plugin.get('commands', [])
             if commands:
                 return commands[0]
-        
         return None
     
     def get_plugin_info(self, plugin_id):
@@ -805,7 +806,7 @@ IA:
             return "Nenhuma nota encontrada."
         
         if cmd == "create_task":
-            result = self.obsidian_api.execute_command("obsidian-tasks-plugin:create-or-edit-task")
+            result = self.obsidian_api.execute_command("editor:toggle-checklist-status")
             if result.get("success"):
                 return "Criador de tarefas aberto!"
             return "Erro ao abrir criador de tarefas."
@@ -883,5 +884,6 @@ def refresh_plugins():
 def get_activity_log(limit=10):
     """Retorna log de atividades"""
     return intelligent_agent.get_activity_log(limit)
+
 
 
