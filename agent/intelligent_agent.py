@@ -805,6 +805,13 @@ IA:
                 return result
             return "Nenhuma nota encontrada."
         
+        
+        if cmd == "create_note":
+            # Usar comando nativo do Obsidian para criar nova nota
+            result = self.obsidian_api.execute_command("file-explorer:new-file")
+            if result.get("success"):
+                return "Criador de notas aberto! Digite o nome da nova nota."
+            return "Erro ao abrir criador de notas."
         if cmd == "create_task":
             result = self.obsidian_api.execute_command("editor:toggle-checklist-status")
             if result.get("success"):
