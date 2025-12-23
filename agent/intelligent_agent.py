@@ -18,6 +18,15 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 import logging
 
+# === ROTEADOR MANUS/LLAMA ===
+try:
+    from ollama_integration import OllamaIntegration, AIRouter, get_ai_router
+    AI_ROUTER = get_ai_router()
+    logger.info(f"AIRouter inicializado - Ollama disponível: {AI_ROUTER.ollama.is_available}")
+except Exception as e:
+    AI_ROUTER = None
+    logger.warning(f"AIRouter não disponível: {e}")
+
 # Desabilitar warnings de SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -891,6 +900,7 @@ def refresh_plugins():
 def get_activity_log(limit=10):
     """Retorna log de atividades"""
     return intelligent_agent.get_activity_log(limit)
+
 
 
 

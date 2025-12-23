@@ -511,3 +511,16 @@ def chat_with_ai(message: str, context: str = None, provider: str = None):
     """Envia mensagem para a IA"""
     return ai_integration.chat(message, context, provider=provider)
 
+
+# === INTEGRAÇÃO OLLAMA (IA LOCAL) ===
+try:
+    from ollama_integration import OllamaIntegration, AIRouter, get_ai_router
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    OLLAMA_AVAILABLE = False
+    class OllamaIntegration:
+        def __init__(self): self.is_available = False
+    class AIRouter:
+        def __init__(self, o=None): pass
+        def route(self, m): return {"provider": "manus", "message": m}
+    def get_ai_router(): return AIRouter()
