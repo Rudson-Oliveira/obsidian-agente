@@ -1,113 +1,72 @@
-# 🧠 Obsidian Agente Inteligente v2.0
+﻿# Obsidian Agent v5.0
 
-**Seu assistente superinteligente para automação e gerenciamento de conhecimento no Obsidian.**
+Agente inteligente para automacao do Obsidian com integracao COMET Bridge.
 
-Este projeto implementa um agente de desktop autônomo que permite a interação com o Obsidian através de linguagem natural, com conhecimento profundo sobre o ecossistema Obsidian, incluindo plugins, temas, API e melhores práticas.
+## Status do Sistema
 
----
+| Componente | Porta | Status |
+|------------|-------|--------|
+| Obsidian Agent | 5001 | Backend API |
+| Frontend Agent | 5173 | Interface Web |
+| COMET Bridge | 5000 | Ponte Manus |
+| ngrok (FIXO) | - | charmless-maureen-subadministratively.ngrok-free.dev |
 
-## ✨ Funcionalidades Principais
+## Instalacao Rapida
 
-| Funcionalidade | Descrição |
-|---|---|
-| **Processamento de Linguagem Natural** | Entende comandos complexos em linguagem natural (português e inglês) |
-| **Base de Conhecimento Integrada** | Conhecimento profundo sobre Obsidian (wikilinks, tags, dataview, etc.) |
-| **Gerenciamento de Notas** | Criar, listar, buscar e abrir notas |
-| **Funcionalidades Avançadas** | Extrair wikilinks, tags, frontmatter e executar queries Dataview |
-| **Interface Inteligente** | Sugestões de comandos, histórico de conversas e visualização de dados |
-| **Inicialização Automática** | Script para iniciar todo o sistema com um único clique |
-| **Configuração Automática** | Detecta e configura automaticamente o caminho do Obsidian |
-| **Segurança** | Autenticação via API Key para todas as requisições |
+### 1. Iniciar Backend:
+cd agent
+python agent.py
 
----
+### 2. Iniciar Frontend:
+cd frontend
+npm install
+npm run dev
 
-## 🚀 Como Usar (Instalação Rápida)
+### 3. Abrir no Obsidian:
+- Ctrl+P -> Open Gate -> Obsidian Agente V5.0
+- URL: http://localhost:5173
 
-### **Requisitos**
+## Inicializacao Automatica
 
-- **Windows** 10 ou superior
-- **Python 3.8+** (com `pip`)
-- **Node.js 18+** (com `npm`)
-- **Git**
+O sistema pode ser iniciado automaticamente ao ligar o PC:
+- Script: C:\Users\rudpa\COMET\Iniciar_Sistema_IA.bat
+- Health Check: C:\Users\rudpa\COMET\Health_Check.ps1
 
-### **Passo 1: Instalação Automática**
+## Estrutura do Projeto
 
-1.  **Abra o PowerShell como Administrador**
-2.  **Execute o comando abaixo para baixar e executar o instalador:**
-
-    ```powershell
-    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Rudson-Oliveira/obsidian-agente/master/INSTALAR_AGENTE.ps1" -OutFile "INSTALAR_AGENTE.ps1"; .\INSTALAR_AGENTE.ps1
-    ```
-
-    O script irá:
-    - Verificar os requisitos
-    - Clonar o repositório para `C:\Users\seu_usuario\obsidian-agente`
-    - Instalar todas as dependências (Python e Node.js)
-    - Iniciar o agente e exibir a **API Key**
-
-### **Passo 2: Uso Diário (Inicialização com 1 Clique)**
-
-1.  **Navegue até a pasta do projeto:** `C:\Users\seu_usuario\obsidian-agente`
-2.  **Execute o arquivo `INICIAR.bat`** (clique duplo)
-
-    O script irá:
-    - Abrir dois terminais (agente e frontend)
-    - Iniciar todo o sistema automaticamente
-    - Abrir a interface web no seu navegador (`http://localhost:5173`)
-
-### **Passo 3: Configurar a API Key**
-
-1.  **Copie a API Key** exibida no terminal do agente.
-2.  **Cole a API Key** na interface web e clique em "Conectar".
-
-**Pronto!** Agora você pode usar todos os comandos inteligentes.
-
----
-
-## 🤖 Comandos Inteligentes
-
-Você pode conversar naturalmente com o agente. Aqui estão alguns exemplos:
-
-- **"Abrir Obsidian"**
-- **"Listar todas as minhas notas"**
-- **"Criar uma nova nota chamada Reunião Semanal"**
-- **"Buscar por projeto X"**
-- **"Explicar como funcionam os wikilinks"**
-- **"Quais são os plugins mais populares?"**
-- **"Ajuda"** (para ver todos os comandos)
-
----
-
-## 📂 Estrutura do Projeto
-
-```
 obsidian-agente/
-├── agent/                 # Agente Backend (Python + Flask)
-│   ├── agent.py             # Servidor Flask e endpoints
-│   ├── intelligent_agent.py # Processamento de NLP e IA
-│   ├── obsidian_knowledge.py# Base de conhecimento do Obsidian
-│   └── obsidian_advanced.py # Funções avançadas do Obsidian
-├── frontend/              # Aplicação Web (React + TypeScript)
+├── agent/           # Backend Python (Flask)
+│   ├── agent.py
+│   └── intelligent_agent.py
+├── frontend/        # Frontend React (Vite)
 │   ├── src/
-│   │   ├── App.tsx          # Componente principal da UI
-│   │   └── services/api.ts  # Serviço de comunicação com a API
-├── docs/                  # Documentação detalhada
-├── INSTALAR_AGENTE.ps1    # Script de instalação automática
-├── INICIAR_TUDO.ps1       # Script de inicialização completa
-├── INICIAR.bat            # Atalho de inicialização
-└── README.md
-```
+│   └── dist/
+└── docs/            # Documentacao
 
----
+## API Endpoints
 
-## 🛠️ Desenvolvimento
+| Endpoint | Metodo | Descricao |
+|----------|--------|----------|
+| /health | GET | Status do sistema |
+| /ai/status | GET | Status da IA |
+| /ai/chat | POST | Chat com IA |
+| /obsidian/notes | GET | Listar notas |
+| /obsidian/note/search | POST | Buscar notas |
+| /obsidian/note/create | POST | Criar nota |
 
-- **Backend:** Python 3.11, Flask, Waitress
-- **Frontend:** React, TypeScript, Vite
-- **Estilo:** CSS moderno com Flexbox e Grid
+## Changelog
 
----
+### v5.0.0 (24-12-2025)
+- URL ngrok fixa (nunca muda)
+- Script de inicializacao automatica
+- Health Check com auto-recuperacao
+- Frontend integrado com Open Gate
+- Documentacao completa V4
 
-## 📄 Licença
+## Credenciais
 
-Este projeto é licenciado sob a Licença MIT. Veja o arquivo `LICENSE` para mais detalhes.
+Ver arquivo de configuracao: ~/.obsidian-agent/config.json
+
+## Autor
+
+Rudson Oliveira - Projeto COMET/Manus
