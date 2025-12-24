@@ -1,0 +1,359 @@
+{
+  "version": "1.0",
+  "updated_at": "2025-12-24T10:00:00",
+  "triggers": [
+    {
+      "id": "trg_weekly_summary",
+      "name": "Resumo Semanal",
+      "type": "scheduled",
+      "config": {
+        "schedule_type": "weekly",
+        "day": "monday",
+        "time": "09:00"
+      },
+      "action": {
+        "type": "generate_summary",
+        "period": "week",
+        "save_to": "Hub Central/Resumos/Semanal"
+      },
+      "description": "Gera resumo das atividades da semana toda segunda às 9h",
+      "enabled": true,
+      "status": "active",
+      "created_at": "2025-12-24T10:00:00",
+      "updated_at": "2025-12-24T10:00:00",
+      "run_count": 0,
+      "error_count": 0
+    },
+    {
+      "id": "trg_email_check",
+      "name": "Check de Emails",
+      "type": "scheduled",
+      "config": {
+        "schedule_type": "interval",
+        "interval": 2,
+        "unit": "hours"
+      },
+      "action": {
+        "type": "run_ai_analysis",
+        "prompt": "Verificar emails importantes e criar resumo",
+        "provider": "auto"
+      },
+      "description": "Verifica emails importantes a cada 2 horas (configurável)",
+      "enabled": false,
+      "status": "disabled",
+      "created_at": "2025-12-24T10:00:00",
+      "updated_at": "2025-12-24T10:00:00",
+      "run_count": 0,
+      "error_count": 0
+    },
+    {
+      "id": "trg_daily_backup",
+      "name": "Backup Diário",
+      "type": "scheduled",
+      "config": {
+        "schedule_type": "daily",
+        "time": "23:00"
+      },
+      "action": {
+        "type": "backup_vault",
+        "script_path": "C:\\Users\\rudpa\\COMET\\backup\\Backup_Sistema_IA.ps1"
+      },
+      "description": "Executa backup do vault todo dia às 23h",
+      "enabled": true,
+      "status": "active",
+      "created_at": "2025-12-24T10:00:00",
+      "updated_at": "2025-12-24T10:00:00",
+      "run_count": 0,
+      "error_count": 0
+    },
+    {
+      "id": "trg_cleanup_logs",
+      "name": "Limpeza de Logs",
+      "type": "scheduled",
+      "config": {
+        "schedule_type": "weekly",
+        "day": "sunday",
+        "time": "03:00"
+      },
+      "action": {
+        "type": "custom_script",
+        "script_type": "powershell",
+        "script": "Get-ChildItem -Path 'C:\\Users\\rudpa\\hub_central\\logs' -Filter '*.log' | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-7) } | Remove-Item -Force"
+      },
+      "description": "Remove logs com mais de 7 dias todo domingo às 3h",
+      "enabled": true,
+      "status": "active",
+      "created_at": "2025-12-24T10:00:00",
+      "updated_at": "2025-12-24T10:00:00",
+      "run_count": 0,
+      "error_count": 0
+    },
+    {
+      "id": "trg_project_template",
+      "name": "Template de Projeto",
+      "type": "event",
+      "config": {
+        "event_type": "note_created",
+        "conditions": {
+          "folder": "Projetos"
+        }
+      },
+      "action": {
+        "type": "apply_template",
+        "template_name": "projeto",
+        "template_content": "# {title}\n\n## Objetivo\n\n## Tarefas\n- [ ] \n\n## Notas\n\n## Referências\n"
+      },
+      "description": "Aplica template quando criar nota na pasta Projetos",
+      "enabled": true,
+      "status": "active",
+      "created_at": "2025-12-24T10:00:00",
+      "updated_at": "2025-12-24T10:00:00",
+      "run_count": 0,
+      "error_count": 0
+    },
+    {
+      "id": "trg_urgent_alert",
+      "name": "Alerta Urgente",
+      "type": "event",
+      "config": {
+        "event_type": "note_modified",
+        "conditions": {
+          "tag": "#urgente"
+        }
+      },
+      "action": {
+        "type": "send_notification",
+        "title": "⚠️ Nota Urgente",
+        "message": "A nota {note_path} foi marcada como urgente"
+      },
+      "description": "Envia alerta quando nota é marcada com #urgente",
+      "enabled": true,
+      "status": "active",
+      "created_at": "2025-12-24T10:00:00",
+      "updated_at": "2025-12-24T10:00:00",
+      "run_count": 0,
+      "error_count": 0
+    },
+    {
+      "id": "trg_auto_index",
+      "name": "Índice Automático",
+      "type": "event",
+      "config": {
+        "event_type": "note_created",
+        "conditions": {}
+      },
+      "action": {
+        "type": "update_note",
+        "path": "Hub Central/Índice.md",
+        "append": "- [[{note_path}]] - {date}"
+      },
+      "description": "Atualiza índice quando nova nota é criada",
+      "enabled": false,
+      "status": "disabled",
+      "created_at": "2025-12-24T10:00:00",
+      "updated_at": "2025-12-24T10:00:00",
+      "run_count": 0,
+      "error_count": 0
+    },
+    {
+      "id": "trg_process_tag",
+      "name": "Processar com IA",
+      "type": "event",
+      "config": {
+        "event_type": "note_modified",
+        "conditions": {
+          "tag": "#processar"
+        }
+      },
+      "action": {
+        "type": "process_with_ai",
+        "instruction": "Analise o conteúdo desta nota e adicione insights relevantes:",
+        "provider": "auto"
+      },
+      "description": "Processa nota com IA quando marcada com #processar",
+      "enabled": true,
+      "status": "active",
+      "created_at": "2025-12-24T10:00:00",
+      "updated_at": "2025-12-24T10:00:00",
+      "run_count": 0,
+      "error_count": 0
+    },
+    {
+      "id": "trg_webhook_n8n",
+      "name": "Processar N8N",
+      "type": "webhook",
+      "config": {
+        "source": "n8n",
+        "endpoint": "/webhook/n8n"
+      },
+      "action": {
+        "type": "create_note",
+        "path": "N8N e Automações/Dados Recebidos",
+        "title": "N8N_{datetime}",
+        "template": "# Dados do N8N\n\n**Recebido em:** {datetime}\n\n## Dados\n\n```json\n{data}\n```"
+      },
+      "description": "Processa dados recebidos do N8N e cria nota",
+      "enabled": true,
+      "status": "active",
+      "created_at": "2025-12-24T10:00:00",
+      "updated_at": "2025-12-24T10:00:00",
+      "run_count": 0,
+      "error_count": 0
+    },
+    {
+      "id": "trg_webhook_whatsapp",
+      "name": "WhatsApp para Nota",
+      "type": "webhook",
+      "config": {
+        "source": "whatsapp",
+        "endpoint": "/webhook/whatsapp"
+      },
+      "action": {
+        "type": "create_note",
+        "path": "WhatsApp/Mensagens",
+        "title": "WhatsApp_{datetime}",
+        "template": "# Mensagem WhatsApp\n\n**De:** {sender}\n**Data:** {datetime}\n\n## Mensagem\n\n{message}"
+      },
+      "description": "Cria nota quando recebe mensagem do WhatsApp",
+      "enabled": true,
+      "status": "active",
+      "created_at": "2025-12-24T10:00:00",
+      "updated_at": "2025-12-24T10:00:00",
+      "run_count": 0,
+      "error_count": 0
+    },
+    {
+      "id": "trg_webhook_email",
+      "name": "Email para Nota",
+      "type": "webhook",
+      "config": {
+        "source": "email",
+        "endpoint": "/webhook/email"
+      },
+      "action": {
+        "type": "create_note",
+        "path": "Emails/Importantes",
+        "title": "Email_{datetime}",
+        "template": "# Email\n\n**De:** {from}\n**Assunto:** {subject}\n**Data:** {datetime}\n\n## Conteúdo\n\n{body}"
+      },
+      "description": "Cria nota quando recebe email importante",
+      "enabled": true,
+      "status": "active",
+      "created_at": "2025-12-24T10:00:00",
+      "updated_at": "2025-12-24T10:00:00",
+      "run_count": 0,
+      "error_count": 0
+    },
+    {
+      "id": "trg_webhook_github",
+      "name": "GitHub Events",
+      "type": "webhook",
+      "config": {
+        "source": "github",
+        "endpoint": "/webhook/github"
+      },
+      "action": {
+        "type": "create_note",
+        "path": "GitHub/Events",
+        "title": "GitHub_{datetime}",
+        "template": "# GitHub Event\n\n**Tipo:** {event_type}\n**Repo:** {repository}\n**Data:** {datetime}\n\n## Detalhes\n\n{details}"
+      },
+      "description": "Registra eventos do GitHub (commits, issues, PRs)",
+      "enabled": true,
+      "status": "active",
+      "created_at": "2025-12-24T10:00:00",
+      "updated_at": "2025-12-24T10:00:00",
+      "run_count": 0,
+      "error_count": 0
+    },
+    {
+      "id": "trg_task_suggestion",
+      "name": "Sugestão de Tarefas",
+      "type": "intelligent",
+      "config": {
+        "condition_type": "inactivity",
+        "threshold_minutes": 60
+      },
+      "action": {
+        "type": "run_ai_analysis",
+        "prompt": "Baseado no contexto atual e nas notas recentes, sugira as próximas tarefas prioritárias para o usuário.",
+        "provider": "auto"
+      },
+      "description": "Sugere tarefas após 1 hora de inatividade",
+      "enabled": false,
+      "status": "disabled",
+      "created_at": "2025-12-24T10:00:00",
+      "updated_at": "2025-12-24T10:00:00",
+      "run_count": 0,
+      "error_count": 0
+    },
+    {
+      "id": "trg_daily_insights",
+      "name": "Insights Diários",
+      "type": "scheduled",
+      "config": {
+        "schedule_type": "daily",
+        "time": "20:00"
+      },
+      "action": {
+        "type": "run_ai_analysis",
+        "prompt": "Analise as notas criadas e modificadas hoje no Obsidian e gere insights relevantes sobre produtividade, padrões e sugestões de melhoria.",
+        "provider": "auto",
+        "save_result": true,
+        "save_path": "Hub Central/Insights/Diário_{date}.md"
+      },
+      "description": "Gera insights das notas do dia às 20h",
+      "enabled": true,
+      "status": "active",
+      "created_at": "2025-12-24T10:00:00",
+      "updated_at": "2025-12-24T10:00:00",
+      "run_count": 0,
+      "error_count": 0
+    },
+    {
+      "id": "trg_pattern_detector",
+      "name": "Detector de Padrões",
+      "type": "intelligent",
+      "config": {
+        "condition_type": "pattern",
+        "check_interval_hours": 24,
+        "min_occurrences": 3
+      },
+      "action": {
+        "type": "run_ai_analysis",
+        "prompt": "Analise os padrões de uso do sistema nas últimas 24 horas e sugira automações que poderiam ser criadas.",
+        "provider": "auto"
+      },
+      "description": "Identifica padrões de uso e sugere automações",
+      "enabled": false,
+      "status": "disabled",
+      "created_at": "2025-12-24T10:00:00",
+      "updated_at": "2025-12-24T10:00:00",
+      "run_count": 0,
+      "error_count": 0
+    },
+    {
+      "id": "trg_meeting_summary",
+      "name": "Resumo de Reunião",
+      "type": "event",
+      "config": {
+        "event_type": "note_created",
+        "conditions": {
+          "tag": "#reuniao"
+        }
+      },
+      "action": {
+        "type": "process_with_ai",
+        "instruction": "Esta é uma nota de reunião. Por favor:\n1. Identifique os participantes\n2. Liste os principais pontos discutidos\n3. Extraia action items com responsáveis\n4. Sugira próximos passos",
+        "provider": "auto"
+      },
+      "description": "Gera resumo e action items de notas de reunião",
+      "enabled": true,
+      "status": "active",
+      "created_at": "2025-12-24T10:00:00",
+      "updated_at": "2025-12-24T10:00:00",
+      "run_count": 0,
+      "error_count": 0
+    }
+  ]
+}

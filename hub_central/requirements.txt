@@ -1,0 +1,23 @@
+﻿# Hub Central - Dependências
+# Criado por Manus para Rudson Oliveira
+
+# Core
+flask>=2.0.0
+flask-cors>=3.0.0
+requests>=2.28.0
+schedule>=1.1.0
+
+# Google Drive (opcional)
+google-api-python-client>=2.0.0
+google-auth-httplib2>=0.1.0
+google-auth-oauthlib>=0.5.0
+
+# OneDrive (opcional)
+msal>=1.20.0
+
+# MySQL (opcional)
+mysql-connector-python>=8.0.0
+
+# Utilitários
+python-dotenv>=0.19.0
+
