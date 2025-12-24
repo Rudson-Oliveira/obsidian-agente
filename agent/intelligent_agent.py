@@ -46,6 +46,16 @@ except ImportError:
     def get_knowledge(): return {}
     def search_knowledge(q): return []
 
+# Importar módulo de lógica de decisão para consulta automática de IAs
+try:
+    from decision_logic import DecisionLogic, analyze as analyze_query
+    DECISION_LOGIC_AVAILABLE = True
+    logger.info("[DECISION] Módulo de lógica de decisão carregado!")
+except ImportError:
+    DECISION_LOGIC_AVAILABLE = False
+    logger.warning("[DECISION] Módulo de lógica de decisão não disponível")
+    def analyze_query(q): return {'category': 'conversation', 'recommended_ia': 'openai', 'should_consult_external': True, 'confidence': 0.5}
+
 
 def load_system_context():
     """Carrega o contexto do sistema"""
@@ -563,6 +573,13 @@ class IntelligentAgent:
         self.session_start = datetime.now()
         self.commands_processed = 0
         log_activity("AGENT_STARTED", {"version": "5.0"})
+        
+        # Inicializar lógica de decisão
+        if DECISION_LOGIC_AVAILABLE:
+            self.decision_logic = DecisionLogic(ai_integration=None)
+            logger.info("[DECISION] Lógica de decisão inicializada!")
+        else:
+            self.decision_logic = None
     
     def _build_command_patterns(self):
         """Constroi padroes de reconhecimento"""
@@ -865,10 +882,32 @@ intelligent_agent = IntelligentAgent()
 
 
 def process_text(text):
-    """Funcao de conveniencia para processar texto"""
+    """Funcao de conveniencia para processar texto com lógica de decisão"""
+    # Analisar a query com lógica de decisão
+    analysis = analyze_query(text)
+    
+    logger.info(f"[DECISION] Query: {text[:50]}...")
+    logger.info(f"[DECISION] Categoria: {analysis.get('category')}")
+    logger.info(f"[DECISION] IA Recomendada: {analysis.get('recommended_ia')}")
+    logger.info(f"[DECISION] Confiança: {analysis.get('confidence', 0):.2f}")
+    
+    # Processar comando normalmente
     command_result = intelligent_agent.process_command(text)
     api_result = {"success": True}
-    return intelligent_agent.generate_response(command_result, api_result)
+    response = intelligent_agent.generate_response(command_result, api_result)
+    
+    # Adicionar informação da decisão se foi consulta de IA
+    if command_result.get('cmd') == 'ask_ai' and DECISION_LOGIC_AVAILABLE:
+        category = analysis.get('category', 'conversation')
+        ia_used = analysis.get('recommended_ia', 'openai')
+        confidence = analysis.get('confidence', 0)
+        
+        # Adicionar indicador de decisão
+        decision_info = f"\n\n[Decisão: {category.upper()} | Confiança: {confidence:.0%}]"
+        if decision_info not in response:
+            response = response.replace('[Via ', f'{decision_info}\n[Via ')
+    
+    return response
 
 
 def get_ai_response(prompt, provider="auto"):
