@@ -16,6 +16,13 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from intelligent_agent import IntelligentAgent
 
+# Configuração de logging (deve vir antes de usar logger)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # Importar lógica de decisão
 try:
     from decision_logic import analyze as analyze_query
@@ -23,14 +30,8 @@ try:
     logger.info("[AGENT] Módulo de lógica de decisão carregado!")
 except ImportError:
     DECISION_LOGIC_AVAILABLE = False
+    logger.warning("[AGENT] Módulo de lógica de decisão não disponível")
     def analyze_query(q): return {'category': 'conversation', 'recommended_ia': 'openai', 'confidence': 0.5}
-
-# ConfiguraÃ§Ã£o de logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 # Inicializar Flask
 app = Flask(__name__)
