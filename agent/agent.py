@@ -16,6 +16,15 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from intelligent_agent import IntelligentAgent
 
+# Importar lógica de decisão
+try:
+    from decision_logic import analyze as analyze_query
+    DECISION_LOGIC_AVAILABLE = True
+    logger.info("[AGENT] Módulo de lógica de decisão carregado!")
+except ImportError:
+    DECISION_LOGIC_AVAILABLE = False
+    def analyze_query(q): return {'category': 'conversation', 'recommended_ia': 'openai', 'confidence': 0.5}
+
 # ConfiguraÃ§Ã£o de logging
 logging.basicConfig(
     level=logging.INFO,
@@ -484,8 +493,16 @@ def intelligent_process():
                 'error': 'Texto nÃ£o fornecido'
             }), 400
         
+        # Analisar query com lógica de decisão
+        analysis = analyze_query(text)
+        logger.info(f"[DECISION] Query: {text[:50]}...")
+        logger.info(f"[DECISION] Categoria: {analysis.get('category')}")
+        logger.info(f"[DECISION] IA Recomendada: {analysis.get('recommended_ia')}")
+        logger.info(f"[DECISION] Confiança: {analysis.get('confidence', 0):.2f}")
+        
         # Processar comando com IA
         command_result = intelligent_agent.process_command(text)
+        command_result['decision_analysis'] = analysis  # Adicionar análise ao resultado
         command = command_result['command']
         params = command_result['parameters']
         
@@ -585,12 +602,23 @@ def intelligent_process():
         # Gerar resposta inteligente
         response_text = intelligent_agent.generate_response(command_result, api_result)
         
+        # Adicionar informação da decisão na resposta
+        if command == 'ask_ai' and DECISION_LOGIC_AVAILABLE:
+            category = analysis.get('category', 'conversation').upper()
+            confidence = analysis.get('confidence', 0)
+            decision_info = f"\n\n[🧠 Decisão: {category} | Confiança: {confidence:.0%}]"
+            if '[Via ' in response_text:
+                response_text = response_text.replace('[Via ', f'{decision_info}\n[Via ')
+            else:
+                response_text += decision_info
+        
         logger.info(f'Comando processado: {command}')
         
         return jsonify({
             'success': True,
             'command': command,
             'response': response_text,
+            'decision': analysis if DECISION_LOGIC_AVAILABLE else None,
             'data': api_result.get('data')
         })
     
