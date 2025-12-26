@@ -1,0 +1,113 @@
+﻿{
+  "sistema": {
+    "nome": "Sistema IA Autônomo",
+    "versao": "3.1",
+    "data_backup": "2025-12-26",
+    "autor": "Rudson-Oliveira",
+    "assistente": "Manus AI"
+  },
+  "diretorios": {
+    "base": "C:\\Users\\{USERNAME}",
+    "comet": "C:\\Users\\{USERNAME}\\COMET",
+    "obsidian_agente": "C:\\Users\\{USERNAME}\\obsidian-agente",
+    "claude_config": "C:\\Users\\{USERNAME}\\.claude",
+    "obsidian_app": "C:\\Users\\{USERNAME}\\AppData\\Local\\Programs\\Obsidian",
+    "ollama_app": "C:\\Users\\{USERNAME}\\AppData\\Local\\Programs\\Ollama"
+  },
+  "servicos": [
+    {
+      "nome": "Obsidian",
+      "porta": null,
+      "executavel": "Obsidian.exe",
+      "tipo": "aplicacao",
+      "ordem_inicio": 1
+    },
+    {
+      "nome": "Ollama",
+      "porta": 11434,
+      "executavel": "Ollama.exe",
+      "tipo": "servidor",
+      "ordem_inicio": 2
+    },
+    {
+      "nome": "COMET Bridge",
+      "porta": 5000,
+      "executavel": "python manus_bridge_unified.py",
+      "tipo": "servidor",
+      "ordem_inicio": 3,
+      "health_check": true
+    },
+    {
+      "nome": "ngrok",
+      "porta": null,
+      "comando": "ngrok http 5000 --url={NGROK_URL}",
+      "tipo": "tunel",
+      "ordem_inicio": 4
+    },
+    {
+      "nome": "Obsidian Agent",
+      "porta": 5001,
+      "executavel": "python obsidian_agent.py",
+      "tipo": "servidor",
+      "ordem_inicio": 5
+    },
+    {
+      "nome": "Hub Central",
+      "porta": 5002,
+      "executavel": "python hub_central.py",
+      "tipo": "servidor",
+      "ordem_inicio": 6
+    },
+    {
+      "nome": "Vision Server",
+      "porta": 5003,
+      "executavel": "python vision_server.py",
+      "tipo": "servidor",
+      "ordem_inicio": 7
+    },
+    {
+      "nome": "Frontend",
+      "porta": 5173,
+      "comando": "npm run dev",
+      "tipo": "servidor",
+      "ordem_inicio": 8
+    },
+    {
+      "nome": "Claude Code Terminal",
+      "porta": null,
+      "tipo": "terminal",
+      "ordem_inicio": 9
+    }
+  ],
+  "credenciais": {
+    "NOTA": "As credenciais devem ser configuradas via variáveis de ambiente ou arquivo .env separado",
+    "claude_api_key": "ANTHROPIC_API_KEY (variável de ambiente)",
+    "obsidian_token": "OBSIDIAN_TOKEN (variável de ambiente)",
+    "ngrok_url": "NGROK_URL (variável de ambiente)"
+  },
+  "repositorios": {
+    "github": "https://github.com/Rudson-Oliveira/obsidian-agente.git",
+    "branch": "master"
+  },
+  "dependencias": {
+    "python": {
+      "versao_minima": "3.11",
+      "pacotes": ["flask", "requests"]
+    },
+    "nodejs": {
+      "versao_minima": "20",
+      "pacotes_globais": ["@anthropic-ai/claude-code"]
+    },
+    "ollama": {
+      "modelos": ["gemma3:4b", "llama3.2", "llava"]
+    }
+  },
+  "instrucoes_restauracao": {
+    "passo_1": "Instalar Python 3.11+, Node.js 20+, Git",
+    "passo_2": "Instalar Obsidian e Ollama",
+    "passo_3": "Configurar variáveis de ambiente (ANTHROPIC_API_KEY, OBSIDIAN_TOKEN, NGROK_URL)",
+    "passo_4": "Executar script Restaurar_Sistema_IA_v3.1.ps1",
+    "passo_5": "Configurar ngrok com seu token",
+    "passo_6": "Executar Iniciar_Sistema_IA.bat"
+  }
+}
