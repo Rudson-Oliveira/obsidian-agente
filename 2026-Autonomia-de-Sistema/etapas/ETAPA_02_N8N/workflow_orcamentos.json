@@ -1,0 +1,137 @@
+{
+  "name": "Automação Orçamentos Hospitalar",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/orcamento",
+        "responseMode": "onReceived",
+        "responseData": "allEntries"
+      },
+      "id": "webhook-orcamento",
+      "name": "Webhook Orçamento",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "operation": "equals",
+              "value2": "pendente"
+            }
+          ]
+        }
+      },
+      "id": "if-pendente",
+      "name": "Verificar Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "llama3.2"
+            },
+            {
+              "name": "prompt",
+              "value": "Analise o seguinte orçamento hospitalar e sugira melhorias:\nPaciente: {{ $json.paciente }}\nValor: R$ {{ $json.valor }}\nProcedimentos: {{ $json.procedimentos }}\n\nResponda em português de forma concisa."
+            },
+            {
+              "name": "stream",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ollama-analise",
+      "name": "Análise IA Local",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "content": "=🏥 *Novo Orçamento Pendente*\n\n📋 *Código:* {{ $json.codigo }}\n👤 *Paciente:* {{ $json.paciente }}\n💰 *Valor:* R$ {{ $json.valor }}\n📅 *Data:* {{ $json.data }}\n\n🤖 *Análise IA:*\n{{ $node[\"Análise IA Local\"].json.response }}"
+      },
+      "id": "telegram-notificacao",
+      "name": "Notificação Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [900, 200],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "functionCode": "// Registrar log do orçamento processado\nconst log = {\n  timestamp: new Date().toISOString(),\n  codigo: items[0].json.codigo,\n  paciente: items[0].json.paciente,\n  valor: items[0].json.valor,\n  status: 'processado',\n  analise_ia: items[0].json.response || 'Sem análise'\n};\n\nreturn [{ json: log }];"
+      },
+      "id": "log-processamento",
+      "name": "Registrar Log",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 400]
+    }
+  ],
+  "connections": {
+    "Webhook Orçamento": {
+      "main": [
+        [
+          {
+            "node": "Verificar Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar Status": {
+      "main": [
+        [
+          {
+            "node": "Análise IA Local",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Análise IA Local": {
+      "main": [
+        [
+          {
+            "node": "Notificação Telegram",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Registrar Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["orcamentos", "hospitalar", "automacao"]
+}
